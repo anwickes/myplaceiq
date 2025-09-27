@@ -1,7 +1,7 @@
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.const import CONF_HOST, CONF_CLIENT_ID, CONF_CLIENT_SECRET
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_CLIENT_ID, CONF_CLIENT_SECRET
 from homeassistant.exceptions import HomeAssistantError
 from .const import DOMAIN, CONF_POLL_INTERVAL
 from .myplaceiq import MyPlaceIQ
@@ -19,12 +19,13 @@ class MyPlaceIQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 myplaceiq = MyPlaceIQ(
                     user_input[CONF_HOST],
+                    user_input[CONF_PORT],
                     user_input[CONF_CLIENT_ID],
                     user_input[CONF_CLIENT_SECRET],
                 )
                 await myplaceiq.send_command(
                     {
-                        {"commands": [{"__type": "GetFullDataEvent"}]}
+                        "commands": [{"__type": "GetFullDataEvent"}]
                     }
                 )
                 return self.async_create_entry(
@@ -39,7 +40,8 @@ class MyPlaceIQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Optional(CONF_HOST, default='imx6ul-redgum.local'): str,
+                    vol.Required(CONF_HOST, default='imx6ul-redgum.local'): str,
+                    vol.Required(CONF_PORT, default='8086'): str,
                     vol.Required(CONF_CLIENT_ID): str,
                     vol.Required(CONF_CLIENT_SECRET): str,
                     vol.Optional(CONF_POLL_INTERVAL, default=60): int,
