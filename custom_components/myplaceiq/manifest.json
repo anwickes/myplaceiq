@@ -1,9 +1,9 @@
 {
-  "domain": "myplaceiq_ha",
-  "name": "MyPlaceIQ_ha",
+  "domain": "myplaceiq",
+  "name": "MyPlaceIQ",
   "codeowners": ["@anwickes"],
   "dependencies": [],
-  "documentation": "https://github.com/anwickes/myplaceiq_ha",
+  "documentation": "https://github.com/anwickes/myplaceiq",
   "integration_type": "hub",
   "iot_class": "local_polling",
   "requirements": ["websockets>10.0.0"],
