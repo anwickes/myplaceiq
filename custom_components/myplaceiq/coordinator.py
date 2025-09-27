@@ -1,7 +1,7 @@
 from datetime import timedelta
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from .const import DOMAIN, CONF_HOST, CONF_CLIENT_ID, CONF_CLIENT_SECRET, CONF_POLL_INTERVAL
+from .const import DOMAIN, CONF_HOST, CONF_PORT, CONF_CLIENT_ID, CONF_CLIENT_SECRET, CONF_POLL_INTERVAL
 from .myplaceiq import MyPlaceIQ
 
 class MyPlaceIQDataUpdateCoordinator(DataUpdateCoordinator):
@@ -12,8 +12,9 @@ class MyPlaceIQDataUpdateCoordinator(DataUpdateCoordinator):
         self.config_entry = config_entry
         self.myplaceiq = MyPlaceIQ(
             config_entry.data[CONF_HOST],
+            config_entry.data[CONF_PORT],
             config_entry.data[CONF_CLIENT_ID],
-            config_entry.data[CONF_CLIENT_SECRET],
+            config_entry.data[CONF_CLIENT_SECRET]
         )
         super().__init__(
             hass,
