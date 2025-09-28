@@ -4,7 +4,7 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 import logging
 
-from .const import DOMAIN, CONF_HOST, CONF_CLIENT_ID, CONF_CLIENT_SECRET, CONF_POLL_INTERVAL
+from .const import DOMAIN, CONF_HOST, CONF_PORT, CONF_CLIENT_ID, CONF_CLIENT_SECRET, CONF_POLL_INTERVAL
 
 logger = logging.getLogger(__name__)
 
