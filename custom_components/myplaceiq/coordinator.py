@@ -1,38 +1,40 @@
+import logging
 from datetime import timedelta
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from .const import DOMAIN, CONF_HOST, CONF_PORT, CONF_CLIENT_ID, CONF_CLIENT_SECRET, CONF_POLL_INTERVAL
-from .myplaceiq import MyPlaceIQ
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from .const import DOMAIN
+import json
+
+logger = logging.getLogger(__name__)
 
 class MyPlaceIQDataUpdateCoordinator(DataUpdateCoordinator):
-    """Class to manage polling MyPlaceIQ hub via WebSocket."""
+    """Class to manage fetching MyPlaceIQ data."""
 
-    def __init__(self, hass: HomeAssistant, config_entry):
+    def __init__(self, hass: HomeAssistant, myplaceiq, update_interval: int):
+        """Initialize the coordinator."""
+        self.myplaceiq = myplaceiq
         self.hass = hass
-        self.config_entry = config_entry
-        self.myplaceiq = MyPlaceIQ(
-            config_entry.data[CONF_HOST],
-            config_entry.data[CONF_PORT],
-            config_entry.data[CONF_CLIENT_ID],
-            config_entry.data[CONF_CLIENT_SECRET]
-        )
+        logger.debug("Initializing MyPlaceIQDataUpdateCoordinator with update_interval: %s seconds", update_interval)
         super().__init__(
             hass,
+            logger,
             name=DOMAIN,
-            update_interval=timedelta(seconds=config_entry.options.get(CONF_POLL_INTERVAL, 60)),
+            update_interval=timedelta(seconds=update_interval),
         )
 
     async def _async_update_data(self):
-        """Fetch data from the MyPlaceIQ hub."""
+        """Fetch data from MyPlaceIQ."""
         try:
-            return await self.myplaceiq.get_data()
+            logger.debug("Fetching data from MyPlaceIQ")
+            response = await self.myplaceiq.send_command({"commands": [{"__type": "GetFullDataEvent"}]})
+            if not isinstance(response, dict) or "body" not in response:
+                logger.error("Invalid response from MyPlaceIQ: %s", response)
+                raise ValueError("Invalid response from MyPlaceIQ")
+            # Ensure body is a JSON string
+            if isinstance(response["body"], dict):
+                response["body"] = json.dumps(response["body"])
+            logger.debug("Received data: %s", response)
+            return response
         except Exception as err:
-            raise UpdateFailed(f"Error fetching data: {err}")
-
-    async def async_send_command(self, command: dict):
-        """Send a command to the MyPlaceIQ hub."""
-        try:
-            await self.myplaceiq.set_data(command)
-            await self.async_request_refresh()
-        except Exception as err:
-            raise UpdateFailed(f"Error sending command: {err}")
+            logger.error("Error fetching data: %s", err)
+            raise
