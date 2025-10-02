@@ -1,102 +1,85 @@
 import json
-import websockets
+import aiohttp
 import random
 import string
 import logging
+import socket
+from aiohttp.client_exceptions import ClientConnectorError
 from homeassistant.exceptions import HomeAssistantError
-from websockets.client import WebSocketClientProtocol
 
-logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 class MyPlaceIQ:
-    """Class to handle WebSocket communication with MyPlaceIQ hub."""
+    """Class to handle WebSocket communication with MyPlaceIQ hub using aiohttp."""
 
-    def __init__(self, host: str, port: str, client_id: str, client_secret: str):
+    def __init__(self, hass, host: str, port: str, client_id: str, client_secret: str):
+        self._hass = hass
         self._host = host
+        self._port = port
         self._client_id = client_id
         self._client_secret = client_secret
-        self._ws_url = 'ws://{}:{}/ws'.format(host, port)
-        logger.debug("Initialized MyPlaceIQ with URL: {}".format(self._ws_url))
+        self._ws_url = f"ws://{host}:{port}/ws"
+        logger.debug("Initialized MyPlaceIQ with URL: %s", self._ws_url)
 
-    async def connect(self):
-        """Establish a WebSocket connection with authentication headers."""
+    async def validate_connection(self):
+        """Validate connection to the MyPlaceIQ hub."""
+        logger.debug("Validating connection to %s", self._ws_url)
         try:
-            # Define custom protocol to include headers
-            async def custom_connect(uri):
-                headers = {
-                    "client_id": self._client_id,
-                    "client_secret": self._client_secret
-                }
-                logger.info('testing')
-                return await websockets.client.connect(uri, extra_headers=headers, ping_interval=None)
-                # For older websockets versions, we avoid extra_headers and handle manually if needed
-                # Note: Older versions may still support headers via WebSocketClientProtocol
-            logger.info('testing2')
-            return await custom_connect(self._ws_url)
-        except websockets.exceptions.WebSocketException as err:
-            raise HomeAssistantError(f"Failed to connect to WebSocket: {err}")
-
-    async def connect(self):
-        """Establish a WebSocket connection with authentication headers."""
-        logger.debug("Attempting to connect to WebSocket: {} with headers client_id={}".format(self._ws_url, self._client_id))
+            socket.getaddrinfo(self._host, self._port)
+        except socket.gaierror as err:
+            logger.error("DNS resolution failed for %s: %s", self._host, err)
+            raise HomeAssistantError(f"DNS resolution failed for {self._host}: {err}") from err
         try:
-            headers = {
-                "client_id": self._client_id,
-                "client_secret": self._client_secret
-            }
-            return await websockets.connect(self._ws_url, extra_headers=headers, ping_interval=None)
-        except websockets.exceptions.WebSocketException as err:
-            logger.error("WebSocket connection failed: {}".format(err))
-            raise HomeAssistantError("Failed to connect to WebSocket: {}".format(err)) from err
-        except OSError as err:
-            logger.error("OS error during WebSocket connection: {}".format(err))
-            raise HomeAssistantError("OS error during WebSocket connection: {}".format(err)) from err
-
-    async def send_command(self, command: dict={}):
-        """Send command to iq hub via websocket."""
-        try:
-            async with await self.connect() as ws:
-                await ws.send(
-                    json.dumps(
-                        {
-                            "uuid": ''.join(random.choices(string.ascii_letters + string.digits, k=20)),
-                            "body": json.dumps(command)
-                        }
-                    )
-                )
-                response = json.loads(await ws.recv())
-                if "system" not in response or "zones" not in response:
-                    raise HomeAssistantError("Invalid response from hub")
-                return response
-        except (websockets.exceptions.WebSocketException, json.JSONDecodeError) as err:
-            logger.info('testing3')
-            raise HomeAssistantError(f"Error fetching data: {err}")
+            async with aiohttp.ClientSession() as session:
+                async with session.ws_connect(
+                    self._ws_url,
+                    headers={"client_id": self._client_id, "password": self._client_secret},
+                    ssl=False
+                ) as ws:
+                    logger.debug("WebSocket connection successful to %s", self._ws_url)
+                    return True
+        except ClientConnectorError as err:
+            logger.error("Failed to connect to WebSocket %s: %s", self._ws_url, err)
+            raise HomeAssistantError(f"Failed to connect to WebSocket: {err}") from err
 
     async def send_command(self, command: dict = {}):
         """Send command to iq hub via websocket."""
-        ws = None
+        logger.debug("Connecting to WebSocket at %s using command: %s", self._ws_url, command)
+        session = None
         try:
-            ws = await self.connect()
-            logger.debug("Sending command to hub: {}".format(command))
-            await ws.send(
-                json.dumps(
-                    {
-                        "uuid": "".join(random.choices(string.ascii_letters + string.digits, k=20)),
-                        "body": json.dumps(command)
-                    }
-                )
-            )
-            response = json.loads(await ws.recv())
-            if "system" not in response or "zones" not in response:
-                logger.error("Invalid response from hub: {}".format(response))
-                raise HomeAssistantError("Invalid response from hub")
-            logger.debug("Received data: {}".format(response))
-            return response
-        except (websockets.exceptions.WebSocketException, json.JSONDecodeError) as err:
-            logger.error("Error fetching data: {}".format(err))
-            raise HomeAssistantError("Error fetching data: {}".format(err)) from err
+            session = aiohttp.ClientSession()
+            async with session.ws_connect(
+                self._ws_url,
+                headers={"client_id": self._client_id, "password": self._client_secret},
+                ssl=False
+            ) as ws:
+                message = {
+                    "uuid": "".join(random.choices(string.ascii_letters + string.digits, k=20)),
+                    "body": json.dumps(command)
+                }
+                logger.debug("Sending command message: %s", message)
+                await ws.send_str(json.dumps(message))
+                response = await ws.receive()
+                if response.type == aiohttp.WSMsgType.TEXT:
+                    parsed_response = json.loads(response.data)
+                    logger.debug("Received response: %s", parsed_response)
+                    if not isinstance(parsed_response, dict):
+                        logger.error("Invalid response type: %s", type(parsed_response))
+                        return {}
+                    return parsed_response
+                else:
+                    logger.error("Received non-text WebSocket message: %s", response.type)
+                    raise HomeAssistantError(f"Invalid WebSocket message type: {response.type}")
+        except ClientConnectorError as err:
+            logger.error("WebSocket connection error: %s", err)
+            raise HomeAssistantError(f"Failed to connect to WebSocket: {err}") from err
+        except json.JSONDecodeError as err:
+            logger.error("Failed to parse WebSocket response: %s", err)
+            raise HomeAssistantError(f"Invalid response: {err}") from err
+        except Exception as err:
+            logger.error("Unexpected error in send_command: %s", err)
+            raise HomeAssistantError(f"Error fetching data: {err}") from err
         finally:
-            if ws is not None:
-                await ws.close()
-                logger.debug("WebSocket connection closed")
+            if session is not None:
+                await session.close()
+                logger.debug("WebSocket session closed")
