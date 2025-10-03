@@ -17,3 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 - N/A
+
+## [1.1.0] - 2025-10-04
+### Added
+- Climate entities for zones (e.g., `climate.main_bedroom_climate`) and main system (e.g., `climate.myplaceiq_system`).
+- Support for temperature control (`SetZoneHeatTemperature`, `SetAirconHeatTemperature`, etc.) and HVAC modes (`heat`, `cool`, `dry`, `fan`, `off`).
+- Integration with thermostat cards for temperature and mode control.
+- Optimistic updates for temperature and mode changes.

@@ -8,6 +8,15 @@ The MyPlaceIQ integration allows Home Assistant to communicate with a MyPlaceIQ 
 - **Configuration**: Set up via the Home Assistant UI with support for host, port, client ID, client secret, and polling interval.
 - **Options Flow**: Update all configuration fields (host, port, client ID, client secret, polling interval) via the integration settings.
 
+## Thermostat Integration
+- **Climate Entities**: Use `climate` entities with Home Assistant’s built-in thermostat card or `simple-thermostat` (via HACS) to control temperatures and modes.
+  - Zones (e.g., `climate.main_bedroom_climate`): Control temperature (16–30°C) and on/off state. Zones inherit the system’s mode (`heat`, `cool`, `dry`, `fan`).
+  - Main System (e.g., `climate.myplaceiq_system`): Control temperature and modes (`heat`, `cool`, `dry`, `fan`, `off`).
+- **Lovelace Configuration**:
+  ```yaml
+  type: thermostat
+  entity: climate.main_bedroom_climate
+
 ## Installation
 
 ### Via HACS (Recommended)
