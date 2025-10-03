@@ -70,6 +70,7 @@ class MyPlaceIQClimate(ClimateEntity):
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_min_temp = 16  # Adjust based on MyPlaceIQ specs
     _attr_max_temp = 30  # Adjust based on MyPlaceIQ specs
+    _attr_target_temperature_step = 1.0  # Enforce whole-number increments
 
     def __init__(self, coordinator, myplaceiq, config_entry, entity_id, entity_data, is_zone, aircon_id=None):
         """Initialize the climate entity."""
@@ -85,7 +86,7 @@ class MyPlaceIQClimate(ClimateEntity):
         self._attr_name = f"{self._name}_climate".replace(" ", "_").lower()
         self._attr_icon = "mdi:thermostat"
         self._attr_hvac_modes = (
-            [HVACMode.HEAT, HVACMode.COOL, HVACMode.OFF] if is_zone else
+            [HVACMode.AUTO, HVACMode.OFF] if is_zone else
             [HVACMode.HEAT, HVACMode.COOL, HVACMode.DRY, HVACMode.FAN_ONLY, HVACMode.OFF]
         )
 
@@ -130,7 +131,7 @@ class MyPlaceIQClimate(ClimateEntity):
         try:
             body = json.loads(data["body"])
             aircon = body.get("aircons", {}).get(self._aircon_id if self._is_zone else self._entity_id, {})
-            mode = aircon.get("mode", "off")
+            mode = aircon.get("mode", "heat")  # Default to heat if mode is unset
             target = body.get("zones" if self._is_zone else "aircons", {}).get(self._entity_id, {})
             if mode == "heat":
                 return target.get("targetTemperatureHeat")
@@ -152,13 +153,7 @@ class MyPlaceIQClimate(ClimateEntity):
             aircon = body.get("aircons", {}).get(self._aircon_id if self._is_zone else self._entity_id, {})
             if self._is_zone:
                 zone = body.get("zones", {}).get(self._entity_id, {})
-                return HVACMode.OFF if not zone.get("isOn", False) else (
-                    HVACMode.HEAT if aircon.get("mode") == "heat" else
-                    HVACMode.COOL if aircon.get("mode") == "cool" else
-                    HVACMode.DRY if aircon.get("mode") == "dry" else
-                    HVACMode.FAN_ONLY if aircon.get("mode") == "fan" else
-                    HVACMode.OFF
-                )
+                return HVACMode.OFF if not zone.get("isOn", False) else HVACMode.AUTO
             else:
                 return (
                     HVACMode.OFF if not aircon.get("isOn", False) else
@@ -193,16 +188,16 @@ class MyPlaceIQClimate(ClimateEntity):
                     "SetAirconHeatTemperature" if mode == "heat" else "SetAirconCoolTemperature"
                 ),
                 "zoneId" if self._is_zone else "airconId": self._entity_id,
-                "temperature": float(temperature)
+                "temperature": int(temperature)  # Ensure whole number
             }]
         }
 
         # Optimistic update
         target = body.get("zones" if self._is_zone else "aircons", {}).get(self._entity_id, {})
         if mode == "heat":
-            target["targetTemperatureHeat"] = temperature
+            target["targetTemperatureHeat"] = int(temperature)
         elif mode == "cool":
-            target["targetTemperatureCool"] = temperature
+            target["targetTemperatureCool"] = int(temperature)
         if self._is_zone:
             body["zones"][self._entity_id] = target
         else:
@@ -221,11 +216,11 @@ class MyPlaceIQClimate(ClimateEntity):
         body = json.loads(data["body"])
 
         if self._is_zone:
-            # Zones use SetZoneOpenClose for OFF, inherit aircon mode
-            if hvac_mode not in [HVACMode.HEAT, HVACMode.COOL, HVACMode.OFF]:
-                logger.warning("Zone %s cannot set mode %s; only OFF is supported", self._entity_id, hvac_mode)
+            # Zones only support AUTO (on, inherit aircon mode) or OFF
+            if hvac_mode not in [HVACMode.AUTO, HVACMode.OFF]:
+                logger.warning("Zone %s cannot set mode %s; only AUTO or OFF supported", self._entity_id, hvac_mode)
                 return
-            new_state = hvac_mode != HVACMode.OFF
+            new_state = hvac_mode == HVACMode.AUTO
             command = {
                 "commands": [{
                     "__type": "SetZoneOpenClose",
@@ -238,20 +233,33 @@ class MyPlaceIQClimate(ClimateEntity):
             zone["isOn"] = new_state
             body["zones"][self._entity_id] = zone
         else:
-            # System uses SetAirconMode or SetAirconOnOff
-            command = {
-                "commands": [{
-                    "__type": "SetAirconOnOff" if hvac_mode == HVACMode.OFF else "SetAirconMode",
+            # System: Set mode and turn on if not OFF, turn off if OFF
+            commands = []
+            if hvac_mode == HVACMode.OFF:
+                commands.append({
+                    "__type": "SetAirconOnOff",
                     "airconId": self._entity_id,
-                    "isOn" if hvac_mode == HVACMode.OFF else "mode": (
-                        False if hvac_mode == HVACMode.OFF else
-                        "heat" if hvac_mode == HVACMode.HEAT else
-                        "cool" if hvac_mode == HVACMode.COOL else
-                        "dry" if hvac_mode == HVACMode.DRY else
-                        "fan"
-                    )
-                }]
-            }
+                    "isOn": False
+                })
+            else:
+                commands.extend([
+                    {
+                        "__type": "SetAirconOnOff",
+                        "airconId": self._entity_id,
+                        "isOn": True
+                    },
+                    {
+                        "__type": "SetAirconMode",
+                        "airconId": self._entity_id,
+                        "mode": (
+                            "heat" if hvac_mode == HVACMode.HEAT else
+                            "cool" if hvac_mode == HVACMode.COOL else
+                            "dry" if hvac_mode == HVACMode.DRY else
+                            "fan"
+                        )
+                    }
+                ])
+            command = {"commands": commands}
             # Optimistic update
             aircon = body.get("aircons", {}).get(self._entity_id, {})
             aircon["isOn"] = hvac_mode != HVACMode.OFF
