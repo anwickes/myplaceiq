@@ -1,0 +1,21 @@
+[MASTER]
+ignore=tests
+extension-pkg-whitelist=voluptuous
+disable=
+    missing-module-docstring,
+    missing-class-docstring,
+    missing-function-docstring,
+    too-few-public-methods,
+    invalid-name,
+    protected-access
+
+[MESSAGES CONTROL]
+enable=
+    all
+disable=
+    C0114, # missing-module-docstring
+    C0115, # missing-class-docstring
+    C0116, # missing-function-docstring
+    R0903, # too-few-public-methods
+    C0103, # invalid-name
+    W0212, # protected-access
