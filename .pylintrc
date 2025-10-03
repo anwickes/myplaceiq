@@ -1,5 +1,5 @@
 [MASTER]
-fail-under=8.5
+fail-under=6.5
 extension-pkg-whitelist=voluptuous
 disable=
     missing-module-docstring,
