@@ -1,0 +1,13 @@
+{
+  "content_in_root": false,
+  "domain": "myplaceiq",
+  "name": "MyPlaceIQ",
+  "documentation": "https://github.com/anwickes/myplaceiq#myplaceiq",
+  "issue_tracker": "https://github.com/anwickes/myplaceiq/issues",
+  "requirements": [],
+  "version": "1.0.0",
+  "iot_class": "local_polling",
+  "codeowners": ["@anwickes"],
+  "config_flow": true,
+  "integration_type": "hub"
+}
