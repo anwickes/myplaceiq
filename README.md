@@ -1,5 +1,5 @@
 # MyPlaceIQ Home Assistant Integration
-![MyPlaceIQ Logo](images/logo.png)
+![MyPlaceIQ Logo](custom_components/images/logo.png)
 
 The MyPlaceIQ integration allows Home Assistant to communicate with a MyPlaceIQ HVAC hub, enabling control and monitoring of heating, ventilation, and air conditioning systems. This integration connects to the hub via a WebSocket connection, providing real-time state updates and control capabilities for devices like Rinnai HVAC units.
 
