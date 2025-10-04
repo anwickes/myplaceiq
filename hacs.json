@@ -4,10 +4,11 @@
   "name": "MyPlaceIQ",
   "documentation": "https://github.com/anwickes/myplaceiq#myplaceiq",
   "issue_tracker": "https://github.com/anwickes/myplaceiq/issues",
-  "requirements": [],
-  "version": "1.0.0",
+  "requirements": ["aiohttp>=3.8.1"],
+  "version": "1.1.0",
   "iot_class": "local_polling",
   "codeowners": ["@anwickes"],
   "config_flow": true,
+  "dependencies": ["climate"],
   "integration_type": "hub"
 }

@@ -35,7 +35,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "myplaceiq": myplaceiq
         }
         
-        await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "button"])
+        await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "button", "climate"])
         return True
     except Exception as err:
         logger.error("Failed to set up MyPlaceIQ integration: %s", err)

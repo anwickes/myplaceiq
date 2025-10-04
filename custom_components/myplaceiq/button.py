@@ -41,7 +41,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 entity_data=aircon_data,
                 action="toggle",
                 command_type="SetAirconOnOff",
-                command_params=None,  # Dynamically set in async_press
+                command_params=None,
                 is_zone=False
             ),
             MyPlaceIQButton(
@@ -104,7 +104,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                         entity_data=zone_data,
                         action="toggle",
                         command_type="SetZoneOpenClose",
-                        command_params=None,  # Dynamically set in async_press
+                        command_params=None,
                         is_zone=True,
                         aircon_id=aircon_id
                     )
@@ -139,22 +139,23 @@ class MyPlaceIQButton(ButtonEntity):
         )
         self._attr_entity_category = EntityCategory.CONFIG
 
-    def _perform_optimistic_update(self, body, new_state):
-        """Perform an optimistic update to coordinator.data and refresh the state sensor."""
+    def _perform_optimistic_update(self, body, attribute, new_value):
+        """Perform an optimistic update to coordinator.data and refresh the appropriate sensor."""
         entity_type = "zones" if self._is_zone else "aircons"
+        sensor_type = "state" if attribute == "isOn" else "mode"
         if entity_type in body and self._entity_id in body[entity_type]:
-            body[entity_type][self._entity_id]["isOn"] = new_state
+            body[entity_type][self._entity_id][attribute] = new_value
             self.coordinator.data = {"body": json.dumps(body)}
-            # Notify the state sensor to update
-            state_sensor_id = f"sensor.{self._name.lower().replace(' ', '_')}_state"
+            # Notify the appropriate sensor to update
+            state_sensor_id = f"sensor.{self._name.lower().replace(' ', '_')}_{sensor_type}"
             self.hass.async_create_task(
                 self.hass.services.async_call(
                     "homeassistant", "update_entity", {"entity_id": state_sensor_id}
                 )
             )
-            logger.debug("Optimistically updated %s %s isOn to %s", entity_type[:-1], self._entity_id, new_state)
+            logger.debug("Optimistically updated %s %s %s to %s", entity_type[:-1], self._entity_id, attribute, new_value)
         else:
-            logger.warning("Could not perform optimistic update for %s %s: not found in data", entity_type[:-1], self._entity_id)
+            logger.warning("Could not perform optimistic update for %s %s %s: not found in data", entity_type[:-1], self._entity_id, attribute)
 
     async def async_press(self):
         """Handle button press for AC or zone commands."""
@@ -180,7 +181,7 @@ class MyPlaceIQButton(ButtonEntity):
                     ]
                 }
                 # Perform optimistic update
-                self._perform_optimistic_update(body, new_state)
+                self._perform_optimistic_update(body, "isOn", new_state)
                 logger.debug("Sent toggle command for aircon %s to isOn=%s", self._entity_id, new_state)
             elif self._command_type == "SetZoneOpenClose" and self._action == "toggle":
                 # Zone toggle: dynamically determine isOpen
@@ -197,7 +198,7 @@ class MyPlaceIQButton(ButtonEntity):
                     ]
                 }
                 # Perform optimistic update
-                self._perform_optimistic_update(body, new_state)
+                self._perform_optimistic_update(body, "isOn", new_state)
                 logger.debug("Sent toggle command for zone %s to isOpen=%s", self._entity_id, new_state)
             else:
                 # Mode commands: use predefined command_params
@@ -210,6 +211,9 @@ class MyPlaceIQButton(ButtonEntity):
                         }
                     ]
                 }
+                # Optimistic update for mode changes
+                if self._command_type == "SetAirconMode":
+                    self._perform_optimistic_update(body, "mode", self._command_params["mode"])
                 logger.debug("Sent %s command for aircon %s: %s", self._action, self._entity_id, self._command_params)
 
             await self._myplaceiq.send_command(command)
