@@ -1,4 +1,5 @@
 """Data update coordinator for MyPlaceIQ integration."""
+import json
 import logging
 from datetime import timedelta
 from typing import Dict, Any
@@ -28,7 +29,9 @@ class MyPlaceIQDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> Dict[str, Any]:
         """Fetch data from MyPlaceIQ."""
         logger.debug("Fetching data from MyPlaceIQ")
-        response = await self.myplaceiq.send_command({"commands": [{"__type": "GetFullDataEvent"}]})
+        response = await self.myplaceiq.send_command({
+            "commands": [{"__type": "GetFullDataEvent"}]
+        })
         body = parse_coordinator_data({"body": response.get("body", {})})
         if not body:
             raise ValueError("Invalid response from MyPlaceIQ")

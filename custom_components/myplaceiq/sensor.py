@@ -1,11 +1,12 @@
 """Sensor entities for MyPlaceIQ integration."""
-import json
 import logging
-from typing import Dict, Any, Optional
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
+from typing import Dict, Any, Optional, List
+from homeassistant.components.sensor import (
+    SensorEntity, SensorDeviceClass, SensorStateClass
+)
 from homeassistant.const import UnitOfTemperature
 from .const import DOMAIN
-from .utils import parse_coordinator_data, get_device_info
+from .utils import parse_coordinator_data, get_device_info, setup_entities
 
 logger = logging.getLogger(__name__)
 
@@ -13,43 +14,34 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up MyPlaceIQ sensor entities from a config entry."""
     logger.debug("Setting up sensor entities for MyPlaceIQ")
     coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
-    body = parse_coordinator_data(coordinator.data)
-    if not body:
-        return
 
-    aircons = body.get("aircons", {})
-    zones = body.get("zones", {})
-    entities = []
-
-    for aircon_id, aircon_data in aircons.items():
-        entities.extend([
-            MyPlaceIQAirconSensor(coordinator, config_entry, aircon_id, aircon_data),
-            MyPlaceIQAirconStateSensor(coordinator, config_entry, aircon_id, aircon_data)
-        ])
-    for aircon_id, aircon_data in aircons.items():
-        for zone_id in aircon_data.get("zoneOrder", []):
-            zone_data = zones.get(zone_id)
-            if zone_data and zone_data.get("isVisible", False):
+    def create_entities(hass, config_entry, coordinator, entity_id: str, entity_data: Dict[str, Any], aircon_id: Optional[str] = None) -> List[SensorEntity]:
+        """Create sensor entities for aircons and zones."""
+        entities = []
+        if aircon_id is None:  # Aircon sensors
+            entities.extend([
+                MyPlaceIQAirconSensor(coordinator, config_entry, entity_id, entity_data),
+                MyPlaceIQAirconStateSensor(coordinator, config_entry, entity_id, entity_data)
+            ])
+        else:  # Zone sensors
+            if entity_data.get("isClickable", False):
                 entities.extend([
-                    MyPlaceIQZoneSensor(coordinator, config_entry, zone_id, zone_data, aircon_id),
-                    MyPlaceIQZoneStateSensor(coordinator, config_entry, zone_id, zone_data, aircon_id)
+                    MyPlaceIQZoneSensor(coordinator, config_entry, entity_id, entity_data, aircon_id),
+                    MyPlaceIQZoneStateSensor(coordinator, config_entry, entity_id, entity_data, aircon_id)
                 ])
+        return entities
 
-    if entities:
-        async_add_entities(entities)
-        logger.debug("Added %d sensor entities", len(entities))
-    else:
-        logger.warning("No sensor entities created; check data structure")
+    entities = setup_entities(hass, config_entry, coordinator, create_entities)
+    async_add_entities(entities)
 
 class MyPlaceIQAirconSensor(SensorEntity):
     """Sensor for MyPlaceIQ AC system mode."""
-
     def __init__(self, coordinator, config_entry, aircon_id: str, aircon_data: Dict[str, Any]):
         """Initialize the aircon mode sensor."""
         super().__init__()
         self.coordinator = coordinator
-        self._aircon_id = aircon_id
         self._config_entry = config_entry
+        self._aircon_id = aircon_id
         self._name = aircon_data.get("name", "Aircon")
         self._attr_unique_id = f"{config_entry.entry_id}_aircon_{aircon_id}_mode"
         self._attr_name = f"{self._name}_mode".replace(" ", "_").lower()
@@ -92,8 +84,8 @@ class MyPlaceIQAirconStateSensor(SensorEntity):
         """Initialize the aircon state sensor."""
         super().__init__()
         self.coordinator = coordinator
-        self._aircon_id = aircon_id
         self._config_entry = config_entry
+        self._aircon_id = aircon_id
         self._name = aircon_data.get("name", "Aircon")
         self._attr_unique_id = f"{config_entry.entry_id}_aircon_{aircon_id}_state"
         self._attr_name = f"{self._name}_state".replace(" ", "_").lower()
@@ -123,9 +115,9 @@ class MyPlaceIQZoneSensor(SensorEntity):
         """Initialize the zone temperature sensor."""
         super().__init__()
         self.coordinator = coordinator
+        self._config_entry = config_entry
         self._zone_id = zone_id
         self._aircon_id = aircon_id
-        self._config_entry = config_entry
         self._name = zone_data.get("name", "Zone")
         self._attr_unique_id = f"{config_entry.entry_id}_zone_{zone_id}_temperature"
         self._attr_name = f"{self._name}_temperature".replace(" ", "_").lower()
@@ -167,9 +159,9 @@ class MyPlaceIQZoneStateSensor(SensorEntity):
         """Initialize the zone state sensor."""
         super().__init__()
         self.coordinator = coordinator
+        self._config_entry = config_entry
         self._zone_id = zone_id
         self._aircon_id = aircon_id
-        self._config_entry = config_entry
         self._name = zone_data.get("name", "Zone")
         self._attr_unique_id = f"{config_entry.entry_id}_zone_{zone_id}_state"
         self._attr_name = f"{self._name}_state".replace(" ", "_").lower()

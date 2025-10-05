@@ -3,7 +3,10 @@ import logging
 from typing import Dict, Any
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from .const import DOMAIN, CONF_HOST, CONF_PORT, CONF_CLIENT_ID, CONF_CLIENT_SECRET, CONF_POLL_INTERVAL
+from .const import (
+    DOMAIN, CONF_HOST, CONF_PORT, CONF_CLIENT_ID,
+    CONF_CLIENT_SECRET, CONF_POLL_INTERVAL
+)
 from .coordinator import MyPlaceIQDataUpdateCoordinator
 from .myplaceiq import MyPlaceIQ
 
@@ -31,22 +34,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             update_interval=entry.options.get(CONF_POLL_INTERVAL, 60)
         )
         await coordinator.async_config_entry_first_refresh()
-        
         hass.data[DOMAIN][entry.entry_id] = {
             "coordinator": coordinator,
             "myplaceiq": myplaceiq
         }
-        
-        await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "button", "climate"])
+        await hass.config_entries.async_forward_entry_setups(
+            entry, ["sensor", "button", "climate"]
+        )
         return True
-    except Exception as err:
+    except Exception as err:  # pylint: disable=broad-except
         logger.error("Failed to set up MyPlaceIQ integration: %s", err)
         raise
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     logger.debug("Unloading MyPlaceIQ entry: %s", entry.entry_id)
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "button", "climate"])
+    unload_ok = await hass.config_entries.async_unload_platforms(
+        entry, ["sensor", "button", "climate"]
+    )
     if unload_ok:
         await hass.data[DOMAIN][entry.entry_id]["myplaceiq"].close()
         hass.data[DOMAIN].pop(entry.entry_id)

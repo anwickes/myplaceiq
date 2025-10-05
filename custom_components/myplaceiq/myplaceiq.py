@@ -1,10 +1,10 @@
 """WebSocket communication for MyPlaceIQ integration."""
 import json
-import aiohttp
+import logging
 import random
 import string
-import logging
 from typing import Dict, Any
+import aiohttp
 from aiohttp.client_exceptions import ClientConnectorError
 from homeassistant.exceptions import HomeAssistantError
 
@@ -13,14 +13,14 @@ logger = logging.getLogger(__name__)
 class MyPlaceIQ:
     """Class to handle WebSocket communication with MyPlaceIQ hub."""
 
-    def __init__(self, hass, host: str, port: int, client_id: str, client_secret: str):
+    def __init__(self, hass, config: Dict[str, Any]):
         """Initialize the MyPlaceIQ client."""
         self._hass = hass
-        self._host = host
-        self._port = port
-        self._client_id = client_id
-        self._client_secret = client_secret
-        self._ws_url = f"ws://{host}:{port}/ws"
+        self._host = config["host"]
+        self._port = config["port"]
+        self._client_id = config["client_id"]
+        self._client_secret = config["client_secret"]
+        self._ws_url = f"ws://{self._host}:{self._port}/ws"
 
     async def validate_connection(self) -> bool:
         """Validate connection to the MyPlaceIQ hub."""
