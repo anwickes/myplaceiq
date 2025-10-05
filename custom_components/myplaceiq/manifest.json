@@ -10,6 +10,7 @@
   "issue_tracker": "https://github.com/anwickes/myplaceiq/issues",
   "requirements": ["aiohttp>=3.8.1"],
   "version": "0.0.1",
+  "homeassistant": "2023.9.0",
   "brand": {
     "logo": "images/logo.png"
   }

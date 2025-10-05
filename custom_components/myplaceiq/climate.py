@@ -1,61 +1,34 @@
+"""Climate entities for MyPlaceIQ integration."""
 import json
 import logging
+from typing import Dict, Any, Optional
 from homeassistant.components.climate import ClimateEntity, ClimateEntityFeature, HVACMode
 from homeassistant.const import UnitOfTemperature
-from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry
 from .const import DOMAIN
+from .utils import parse_coordinator_data, get_device_info
 
 logger = logging.getLogger(__name__)
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
+async def async_setup_entry(hass, entry, async_add_entities):
     """Set up MyPlaceIQ climate entities from a config entry."""
+    logger.debug("Setting up climate entities for MyPlaceIQ")
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     myplaceiq = hass.data[DOMAIN][entry.entry_id]["myplaceiq"]
-    data = coordinator.data
-
-    if not isinstance(data, dict) or not data or "body" not in data:
-        logger.error("Invalid or missing coordinator data: %s", data)
-        return
-
-    try:
-        body = json.loads(data["body"])
-    except (json.JSONDecodeError, TypeError) as err:
-        logger.error("Failed to parse coordinator data body: %s", err)
+    body = parse_coordinator_data(coordinator.data)
+    if not body:
         return
 
     aircons = body.get("aircons", {})
     zones = body.get("zones", {})
-
     entities = []
-    # System climate entity
+
     for aircon_id, aircon_data in aircons.items():
-        entities.append(
-            MyPlaceIQClimate(
-                coordinator=coordinator,
-                myplaceiq=myplaceiq,
-                config_entry=entry,
-                entity_id=aircon_id,
-                entity_data=aircon_data,
-                is_zone=False
-            )
-        )
-    # Zone climate entities
+        entities.append(MyPlaceIQClimate(coordinator, myplaceiq, entry, aircon_id, aircon_data, False))
     for aircon_id, aircon_data in aircons.items():
         for zone_id in aircon_data.get("zoneOrder", []):
             zone_data = zones.get(zone_id)
             if zone_data and zone_data.get("isVisible", False):
-                entities.append(
-                    MyPlaceIQClimate(
-                        coordinator=coordinator,
-                        myplaceiq=myplaceiq,
-                        config_entry=entry,
-                        entity_id=zone_id,
-                        entity_data=zone_data,
-                        is_zone=True,
-                        aircon_id=aircon_id
-                    )
-                )
+                entities.append(MyPlaceIQClimate(coordinator, myplaceiq, entry, zone_id, zone_data, True, aircon_id))
 
     if entities:
         async_add_entities(entities)
@@ -65,14 +38,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 
 class MyPlaceIQClimate(ClimateEntity):
     """Representation of a MyPlaceIQ climate entity for zones or system."""
-
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_min_temp = 16  # Adjust based on MyPlaceIQ specs
-    _attr_max_temp = 30  # Adjust based on MyPlaceIQ specs
-    _attr_target_temperature_step = 1.0  # Enforce whole-number increments
+    _attr_min_temp = 16
+    _attr_max_temp = 30
+    _attr_target_temperature_step = 1.0
 
-    def __init__(self, coordinator, myplaceiq, config_entry, entity_id, entity_data, is_zone, aircon_id=None):
+    def __init__(self, coordinator, myplaceiq, config_entry, entity_id: str, entity_data: Dict[str, Any], is_zone: bool, aircon_id: Optional[str] = None):
         """Initialize the climate entity."""
         super().__init__()
         self.coordinator = coordinator
@@ -90,96 +62,78 @@ class MyPlaceIQClimate(ClimateEntity):
             [HVACMode.HEAT, HVACMode.COOL, HVACMode.DRY, HVACMode.FAN_ONLY, HVACMode.OFF]
         )
 
-    @property
-    def device_info(self):
-        """Return device information."""
-        device_info = {
-            "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_{'zone' if self._is_zone else 'aircon'}_{self._entity_id}")},
-            "name": f"{'Zone' if self._is_zone else 'Aircon'} {self._name}",
-            "manufacturer": "MyPlaceIQ",
-            "model": "Zone" if self._is_zone else "Aircon"
-        }
-        if self._is_zone:
-            device_info["via_device"] = (DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}")
-        return device_info
+    def _perform_optimistic_update(self, body: Dict[str, Any], attribute: str, new_value: Any) -> None:
+        """Perform an optimistic update to coordinator.data."""
+        entity_type = "zones" if self._is_zone else "aircons"
+        if entity_type in body and self._entity_id in body[entity_type]:
+            body[entity_type][self._entity_id][attribute] = new_value
+            self.coordinator.data = {"body": json.dumps(body)}
+            self.async_write_ha_state()
+            logger.debug("Optimistically updated %s %s %s to %s", entity_type[:-1], self._entity_id, attribute, new_value)
+        else:
+            logger.warning("Could not perform optimistic update for %s %s %s: not found in data", entity_type[:-1], self._entity_id, attribute)
 
     @property
-    def available(self):
+    def device_info(self) -> Dict[str, Any]:
+        """Return device information."""
+        return get_device_info(self._config_entry.entry_id, self._entity_id, self._name, self._is_zone, self._aircon_id)
+
+    @property
+    def available(self) -> bool:
         """Return if entity is available."""
         return self.coordinator.last_update_success
 
     @property
-    def current_temperature(self):
+    def current_temperature(self) -> Optional[float]:
         """Return the current temperature."""
-        data = self.coordinator.data
-        if not isinstance(data, dict) or not data or "body" not in data:
+        body = parse_coordinator_data(self.coordinator.data)
+        if not body:
             return None
-        try:
-            body = json.loads(data["body"])
-            target = body.get("zones" if self._is_zone else "aircons", {}).get(self._entity_id, {})
-            return target.get("temperatureSensorValue" if self._is_zone else "actualTemperature")
-        except (json.JSONDecodeError, TypeError) as err:
-            logger.error("Failed to parse current temperature: %s", err)
-            return None
+        target = body.get("zones" if self._is_zone else "aircons", {}).get(self._entity_id, {})
+        return target.get("temperatureSensorValue" if self._is_zone else "actualTemperature")
 
     @property
-    def target_temperature(self):
+    def target_temperature(self) -> Optional[float]:
         """Return the target temperature based on the aircon's mode."""
-        data = self.coordinator.data
-        if not isinstance(data, dict) or not data or "body" not in data:
+        body = parse_coordinator_data(self.coordinator.data)
+        if not body:
             return None
-        try:
-            body = json.loads(data["body"])
-            aircon = body.get("aircons", {}).get(self._aircon_id if self._is_zone else self._entity_id, {})
-            mode = aircon.get("mode", "heat")  # Default to heat if mode is unset
-            target = body.get("zones" if self._is_zone else "aircons", {}).get(self._entity_id, {})
-            if mode == "heat":
-                return target.get("targetTemperatureHeat")
-            elif mode == "cool":
-                return target.get("targetTemperatureCool")
-            return None
-        except (json.JSONDecodeError, TypeError) as err:
-            logger.error("Failed to parse target temperature: %s", err)
-            return None
+        aircon = body.get("aircons", {}).get(self._aircon_id if self._is_zone else self._entity_id, {})
+        mode = aircon.get("mode", "heat")
+        target = body.get("zones" if self._is_zone else "aircons", {}).get(self._entity_id, {})
+        return target.get("targetTemperatureHeat" if mode == "heat" else "targetTemperatureCool")
 
     @property
-    def hvac_mode(self):
+    def hvac_mode(self) -> str:
         """Return the current HVAC mode."""
-        data = self.coordinator.data
-        if not isinstance(data, dict) or not data or "body" not in data:
+        body = parse_coordinator_data(self.coordinator.data)
+        if not body:
             return HVACMode.OFF
-        try:
-            body = json.loads(data["body"])
-            aircon = body.get("aircons", {}).get(self._aircon_id if self._is_zone else self._entity_id, {})
-            if self._is_zone:
-                zone = body.get("zones", {}).get(self._entity_id, {})
-                return HVACMode.OFF if not zone.get("isOn", False) else HVACMode.AUTO
-            else:
-                return (
-                    HVACMode.OFF if not aircon.get("isOn", False) else
-                    HVACMode.HEAT if aircon.get("mode") == "heat" else
-                    HVACMode.COOL if aircon.get("mode") == "cool" else
-                    HVACMode.DRY if aircon.get("mode") == "dry" else
-                    HVACMode.FAN_ONLY if aircon.get("mode") == "fan" else
-                    HVACMode.OFF
-                )
-        except (json.JSONDecodeError, TypeError) as err:
-            logger.error("Failed to parse HVAC mode: %s", err)
-            return HVACMode.OFF
+        aircon = body.get("aircons", {}).get(self._aircon_id if self._is_zone else self._entity_id, {})
+        if self._is_zone:
+            zone = body.get("zones", {}).get(self._entity_id, {})
+            return HVACMode.OFF if not zone.get("isOn", False) else HVACMode.AUTO
+        return (
+            HVACMode.OFF if not aircon.get("isOn", False) else
+            HVACMode.HEAT if aircon.get("mode") == "heat" else
+            HVACMode.COOL if aircon.get("mode") == "cool" else
+            HVACMode.DRY if aircon.get("mode") == "dry" else
+            HVACMode.FAN_ONLY if aircon.get("mode") == "fan" else
+            HVACMode.OFF
+        )
 
-    async def async_set_temperature(self, **kwargs):
+    async def async_set_temperature(self, **kwargs) -> None:
         """Set new target temperature."""
         temperature = kwargs.get("temperature")
         if temperature is None:
             return
 
-        data = self.coordinator.data
-        if not isinstance(data, dict) or not data or "body" not in data:
+        body = parse_coordinator_data(self.coordinator.data)
+        if not body:
             return
-        body = json.loads(data["body"])
-        aircon = body.get("aircons", {}).get(self._aircon_id if self._is_zone else self._entity_id, {})
-        mode = aircon.get("mode", "heat")  # Default to heat if mode is unset
 
+        aircon = body.get("aircons", {}).get(self._aircon_id if self._is_zone else self._entity_id, {})
+        mode = aircon.get("mode", "heat")
         command = {
             "commands": [{
                 "__type": (
@@ -188,66 +142,35 @@ class MyPlaceIQClimate(ClimateEntity):
                     "SetAirconHeatTemperature" if mode == "heat" else "SetAirconCoolTemperature"
                 ),
                 "zoneId" if self._is_zone else "airconId": self._entity_id,
-                "temperature": int(temperature)  # Ensure whole number
+                "temperature": int(temperature)
             }]
         }
 
-        # Optimistic update
-        target = body.get("zones" if self._is_zone else "aircons", {}).get(self._entity_id, {})
-        if mode == "heat":
-            target["targetTemperatureHeat"] = int(temperature)
-        elif mode == "cool":
-            target["targetTemperatureCool"] = int(temperature)
-        if self._is_zone:
-            body["zones"][self._entity_id] = target
-        else:
-            body["aircons"][self._entity_id] = target
-        self.coordinator.data["body"] = json.dumps(body)
-        self.async_write_ha_state()
-
+        self._perform_optimistic_update(body, "targetTemperatureHeat" if mode == "heat" else "targetTemperatureCool", int(temperature))
         await self._myplaceiq.send_command(command)
-        await self.coordinator.async_request_refresh()
+        self.hass.async_create_task(self.coordinator.async_request_refresh())
 
-    async def async_set_hvac_mode(self, hvac_mode):
+    async def async_set_hvac_mode(self, hvac_mode: str) -> None:
         """Set new HVAC mode."""
-        data = self.coordinator.data
-        if not isinstance(data, dict) or not data or "body" not in data:
+        body = parse_coordinator_data(self.coordinator.data)
+        if not body:
             return
-        body = json.loads(data["body"])
 
+        command = {"commands": []}
         if self._is_zone:
-            # Zones only support AUTO (on, inherit aircon mode) or OFF
             if hvac_mode not in [HVACMode.AUTO, HVACMode.OFF]:
                 logger.warning("Zone %s cannot set mode %s; only AUTO or OFF supported", self._entity_id, hvac_mode)
                 return
             new_state = hvac_mode == HVACMode.AUTO
-            command = {
-                "commands": [{
-                    "__type": "SetZoneOpenClose",
-                    "zoneId": self._entity_id,
-                    "isOpen": new_state
-                }]
-            }
-            # Optimistic update
-            zone = body.get("zones", {}).get(self._entity_id, {})
-            zone["isOn"] = new_state
-            body["zones"][self._entity_id] = zone
+            command["commands"].append({"__type": "SetZoneOpenClose", "zoneId": self._entity_id, "isOpen": new_state})
+            self._perform_optimistic_update(body, "isOn", new_state)
         else:
-            # System: Set mode and turn on if not OFF, turn off if OFF
-            commands = []
             if hvac_mode == HVACMode.OFF:
-                commands.append({
-                    "__type": "SetAirconOnOff",
-                    "airconId": self._entity_id,
-                    "isOn": False
-                })
+                command["commands"].append({"__type": "SetAirconOnOff", "airconId": self._entity_id, "isOn": False})
+                self._perform_optimistic_update(body, "isOn", False)
             else:
-                commands.extend([
-                    {
-                        "__type": "SetAirconOnOff",
-                        "airconId": self._entity_id,
-                        "isOn": True
-                    },
+                command["commands"].extend([
+                    {"__type": "SetAirconOnOff", "airconId": self._entity_id, "isOn": True},
                     {
                         "__type": "SetAirconMode",
                         "airconId": self._entity_id,
@@ -259,21 +182,13 @@ class MyPlaceIQClimate(ClimateEntity):
                         )
                     }
                 ])
-            command = {"commands": commands}
-            # Optimistic update
-            aircon = body.get("aircons", {}).get(self._entity_id, {})
-            aircon["isOn"] = hvac_mode != HVACMode.OFF
-            if hvac_mode != HVACMode.OFF:
-                aircon["mode"] = (
+                self._perform_optimistic_update(body, "isOn", True)
+                self._perform_optimistic_update(body, "mode", (
                     "heat" if hvac_mode == HVACMode.HEAT else
                     "cool" if hvac_mode == HVACMode.COOL else
                     "dry" if hvac_mode == HVACMode.DRY else
                     "fan"
-                )
-            body["aircons"][self._entity_id] = aircon
-
-        self.coordinator.data["body"] = json.dumps(body)
-        self.async_write_ha_state()
+                ))
 
         await self._myplaceiq.send_command(command)
-        await self.coordinator.async_request_refresh()
+        self.hass.async_create_task(self.coordinator.async_request_refresh())

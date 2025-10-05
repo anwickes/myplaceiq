@@ -1,9 +1,11 @@
+"""Data update coordinator for MyPlaceIQ integration."""
 import logging
 from datetime import timedelta
+from typing import Dict, Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from .const import DOMAIN
-import json
+from .utils import parse_coordinator_data
 
 logger = logging.getLogger(__name__)
 
@@ -12,29 +14,22 @@ class MyPlaceIQDataUpdateCoordinator(DataUpdateCoordinator):
 
     def __init__(self, hass: HomeAssistant, myplaceiq, update_interval: int):
         """Initialize the coordinator."""
+        if not isinstance(update_interval, int) or update_interval < 10 or update_interval > 300:
+            raise ValueError("Update interval must be between 10 and 300 seconds")
         self.myplaceiq = myplaceiq
         self.hass = hass
-        logger.debug("Initializing MyPlaceIQDataUpdateCoordinator with update_interval: %s seconds", update_interval)
         super().__init__(
             hass,
             logger,
             name=DOMAIN,
-            update_interval=timedelta(seconds=update_interval),
+            update_interval=timedelta(seconds=update_interval)
         )
 
-    async def _async_update_data(self):
+    async def _async_update_data(self) -> Dict[str, Any]:
         """Fetch data from MyPlaceIQ."""
-        try:
-            logger.debug("Fetching data from MyPlaceIQ")
-            response = await self.myplaceiq.send_command({"commands": [{"__type": "GetFullDataEvent"}]})
-            if not isinstance(response, dict) or "body" not in response:
-                logger.error("Invalid response from MyPlaceIQ: %s", response)
-                raise ValueError("Invalid response from MyPlaceIQ")
-            # Ensure body is a JSON string
-            if isinstance(response["body"], dict):
-                response["body"] = json.dumps(response["body"])
-            logger.debug("Received data: %s", response)
-            return response
-        except Exception as err:
-            logger.error("Error fetching data: %s", err)
-            raise
+        logger.debug("Fetching data from MyPlaceIQ")
+        response = await self.myplaceiq.send_command({"commands": [{"__type": "GetFullDataEvent"}]})
+        body = parse_coordinator_data({"body": response.get("body", {})})
+        if not body:
+            raise ValueError("Invalid response from MyPlaceIQ")
+        return {"body": json.dumps(body)}

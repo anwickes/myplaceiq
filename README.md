@@ -53,11 +53,21 @@ The MyPlaceIQ integration allows Home Assistant to communicate with a MyPlaceIQ 
 
 ## Notes
 ### Host & Credential Retrieval
-As of the time of writing (3rd Oct, 2025), the method of obtaining the client id and password is a little tricky. I was able to retrieve them by setting up port mirroring on a switch that I have on my network. I mirrored packets received and transmitted by the myplaceiq hub to another PC that was monitoring with Wireshark. After connecting to the hub via the myplaceiq app on my phone (any device would be fine), I could see a packet that was sent which contained the client id and secret in plaintext. I have attempted to use a mitmproxy (like Charles proxy, mitmproxy etc) to retrieve this information but haven't managed to work it out yet.
+DISCLAIMER: There are probably many ways to do this, all differing from platform to platform. This is the method that I used with my macbook air (silicon).
+
+- Download Wireshark (https://www.wireshark.org/download.html) and BlueStacks Air (https://www.bluestacks.com/mac). Install both.
+- Launch Wireshark, choose the appropriate network adapter and filter traffic to/from your MyPlaceIQ hub's ip address using the following filter: "ip.addr==x.x.x.x".
+- Launch BlueStacks and click the Home button ("House" symbol at the top of screen). Open the "System Apps" folder and open PlayStore. Login with your Google details. After logging in, search and install "MyPlaceIQ".
+- After opening the MyPlaceIQ app, click through the wizard and setup as you would a new device. This includes pairing with the hub etc. 
+- Once paired and confirming that you can control the unit, close the app and open Wireshark.
+- Confirm that Wireshark is currently recording and filtered to your MyPlaceIQ hub's IP address.
+- Using BlueStacks, open up the MyPlaceIQ app and after it successfully logs in, press the stop button in Wireshark to pause recording.
+- Look through the packets that have been sent to and from your MyPlaceIQ hub and you should see a "HTTP" packet sent from your BlueStacks device to your MyPlaceIQ hub. Click into this packet and you should see a payload that contains both the "client_id" and "password" that is being issued to your hub. 
+- Make a note of these credentials as this is what you will be using when configuring this Home Assistant component.
 
 ### IP Address vs. DNS
 - Home Assistant does not support mDNS (multicast DNS) for resolving hostnames. You must use the hub’s static IP address (e.g., `192.168.1.x`) in the configuration.
-- To find the IP address of your myplaceiq hub, check your router’s DHCP client list or use a network scanner. Ensure the hub has a static IP to prevent changes during DHCP lease renewals.
+- To find the IP address of your MyPlaceIQ hub, check your router’s DHCP client list or use a network scanner. Ensure the hub has a static IP to prevent changes during DHCP lease renewals.
 
 ## Requirements
 - Home Assistant 2023.9 or later.
