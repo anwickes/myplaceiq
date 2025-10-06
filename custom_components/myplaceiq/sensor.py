@@ -60,8 +60,12 @@ class MyPlaceIQAirconSensor(SensorEntity):
     ):
         """Initialize the aircon mode sensor."""
         super().__init__()
-        init_entity(self, coordinator, None, config_entry, aircon_id,
-                   aircon_data, "sensor")
+        init_entity(self, coordinator, None, config_entry, {
+            'entity_id': aircon_id,
+            'entity_data': aircon_data,
+            'entity_type': "sensor",
+            'is_zone': False
+        })
 
     @property
     def state(self) -> Optional[str]:
@@ -89,9 +93,12 @@ class MyPlaceIQAirconSensor(SensorEntity):
     @property
     def device_info(self) -> Dict[str, Any]:
         """Return device information."""
-        return get_device_info(
-            self._config_entry.entry_id, self._entity_id, self._name, False
-        )
+        return get_device_info({
+            'config_entry_id': self._config_entry.entry_id,
+            'entity_id': self._entity_id,
+            'name': self._name,
+            'is_zone': False
+        })
 
 class MyPlaceIQAirconStateSensor(SensorEntity):
     """Sensor for MyPlaceIQ AC system on/off state."""
@@ -104,8 +111,12 @@ class MyPlaceIQAirconStateSensor(SensorEntity):
     ):
         """Initialize the aircon state sensor."""
         super().__init__()
-        init_entity(self, coordinator, None, config_entry, aircon_id,
-                   aircon_data, "sensor")
+        init_entity(self, coordinator, None, config_entry, {
+            'entity_id': aircon_id,
+            'entity_data': aircon_data,
+            'entity_type': "sensor",
+            'is_zone': False
+        })
 
     @property
     def state(self) -> Optional[str]:
@@ -119,9 +130,12 @@ class MyPlaceIQAirconStateSensor(SensorEntity):
     @property
     def device_info(self) -> Dict[str, Any]:
         """Return device information."""
-        return get_device_info(
-            self._config_entry.entry_id, self._entity_id, self._name, False
-        )
+        return get_device_info({
+            'config_entry_id': self._config_entry.entry_id,
+            'entity_id': self._entity_id,
+            'name': self._name,
+            'is_zone': False
+        })
 
 class MyPlaceIQZoneSensor(SensorEntity):
     """Sensor for MyPlaceIQ zone temperature."""
@@ -135,8 +149,13 @@ class MyPlaceIQZoneSensor(SensorEntity):
     ):
         """Initialize the zone temperature sensor."""
         super().__init__()
-        init_entity(self, coordinator, None, config_entry, zone_id,
-                   zone_data, "sensor", is_zone=True, aircon_id=aircon_id)
+        init_entity(self, coordinator, None, config_entry, {
+            'entity_id': zone_id,
+            'entity_data': zone_data,
+            'entity_type': "sensor",
+            'is_zone': True,
+            'aircon_id': aircon_id
+        })
 
     @property
     def state(self) -> Optional[float]:
@@ -163,10 +182,13 @@ class MyPlaceIQZoneSensor(SensorEntity):
     @property
     def device_info(self) -> Dict[str, Any]:
         """Return device information."""
-        return get_device_info(
-            self._config_entry.entry_id, self._entity_id,
-            self._name, True, self._aircon_id
-        )
+        return get_device_info({
+            'config_entry_id': self._config_entry.entry_id,
+            'entity_id': self._entity_id,
+            'name': self._name,
+            'is_zone': True,
+            'aircon_id': self._aircon_id
+        })
 
 class MyPlaceIQZoneStateSensor(SensorEntity):
     """Sensor for MyPlaceIQ zone on/off state."""
@@ -179,8 +201,13 @@ class MyPlaceIQZoneStateSensor(SensorEntity):
     ):
         """Initialize the zone state sensor."""
         super().__init__()
-        init_entity(self, coordinator, None, config_entry, zone_id,
-                   zone_data, "sensor", is_zone=True, aircon_id=aircon_id)
+        init_entity(self, coordinator, None, config_entry, {
+            'entity_id': zone_id,
+            'entity_data': zone_data,
+            'entity_type': "sensor",
+            'is_zone': True,
+            'aircon_id': aircon_id
+        })
 
     @property
     def state(self) -> Optional[str]:
@@ -194,7 +221,10 @@ class MyPlaceIQZoneStateSensor(SensorEntity):
     @property
     def device_info(self) -> Dict[str, Any]:
         """Return device information."""
-        return get_device_info(
-            self._config_entry.entry_id, self._entity_id,
-            self._name, True, self._aircon_id
-        )
+        return get_device_info({
+            'config_entry_id': self._config_entry.entry_id,
+            'entity_id': self._entity_id,
+            'name': self._name,
+            'is_zone': True,
+            'aircon_id': self._aircon_id
+        })
