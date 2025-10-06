@@ -1,21 +1,10 @@
 [MASTER]
 fail-under=6.5
-extension-pkg-whitelist=
-    voluptuous,
-    homeassistant,
-    homeassistant.components.button,
-    homeassistant.components.climate,
-    homeassistant.components.sensor,
-    homeassistant.config_entries,
-    homeassistant.const,
-    homeassistant.core,
-    homeassistant.exceptions,
-    homeassistant.helpers.update_coordinator,
-    aiohttp.client_exceptions
 disable=
     missing-module-docstring,
     missing-class-docstring,
     missing-function-docstring,
     too-few-public-methods,
     invalid-name,
-    protected-access
+    protected-access,
+    import-error
