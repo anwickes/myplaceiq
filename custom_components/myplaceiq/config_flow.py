@@ -2,7 +2,7 @@
 import logging
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from aiohttp.client_exceptions import ClientConnectorError
 from .const import (
     DOMAIN, CONF_HOST, CONF_PORT, CONF_CLIENT_ID,

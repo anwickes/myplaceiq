@@ -1,6 +1,7 @@
 """Sensor entities for MyPlaceIQ integration."""
 import logging
 from typing import Dict, Any, Optional, List
+from homeassistant.core import HomeAssistant
 from homeassistant.components.sensor import (
     SensorEntity, SensorDeviceClass, SensorStateClass
 )
@@ -10,13 +11,13 @@ from .utils import parse_coordinator_data, get_device_info, setup_entities, init
 
 logger = logging.getLogger(__name__)
 
-async def async_setup_entry(hass, config_entry, async_add_entities):
+async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entities):
     """Set up MyPlaceIQ sensor entities from a config entry."""
     logger.debug("Setting up sensor entities for MyPlaceIQ")
     coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
 
     def create_entities(
-        hass: HomeAssistant,  # Used for type hint
+        _hass: HomeAssistant,  # Type hint only
         config_entry,
         coordinator,
         entity_id: str,
@@ -27,14 +28,24 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         entities = []
         if aircon_id is None:  # Aircon sensors
             entities.extend([
-                MyPlaceIQAirconSensor(coordinator, config_entry, entity_id, entity_data),
-                MyPlaceIQAirconStateSensor(coordinator, config_entry, entity_id, entity_data)
+                MyPlaceIQAirconSensor(
+                    coordinator, config_entry, entity_id, entity_data
+                ),
+                MyPlaceIQAirconStateSensor(
+                    coordinator, config_entry, entity_id, entity_data
+                )
             ])
         else:  # Zone sensors
             if entity_data.get("isClickable", False):
                 entities.extend([
-                    MyPlaceIQZoneSensor(coordinator, config_entry, entity_id, entity_data, aircon_id),
-                    MyPlaceIQZoneStateSensor(coordinator, config_entry, entity_id, entity_data, aircon_id)
+                    MyPlaceIQZoneSensor(
+                        coordinator, config_entry, entity_id,
+                        entity_data, aircon_id
+                    ),
+                    MyPlaceIQZoneStateSensor(
+                        coordinator, config_entry, entity_id,
+                        entity_data, aircon_id
+                    )
                 ])
         return entities
 
@@ -43,10 +54,14 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
 class MyPlaceIQAirconSensor(SensorEntity):
     """Sensor for MyPlaceIQ AC system mode."""
-    def __init__(self, coordinator, config_entry, aircon_id: str, aircon_data: Dict[str, Any]):
+    def __init__(
+        self, coordinator, config_entry,
+        aircon_id: str, aircon_data: Dict[str, Any]
+    ):
         """Initialize the aircon mode sensor."""
         super().__init__()
-        init_entity(self, coordinator, None, config_entry, aircon_id, aircon_data, "sensor")
+        init_entity(self, coordinator, None, config_entry, aircon_id,
+                   aircon_data, "sensor")
 
     @property
     def state(self) -> Optional[str]:
@@ -74,17 +89,23 @@ class MyPlaceIQAirconSensor(SensorEntity):
     @property
     def device_info(self) -> Dict[str, Any]:
         """Return device information."""
-        return get_device_info(self._config_entry.entry_id, self._entity_id, self._name, False)
+        return get_device_info(
+            self._config_entry.entry_id, self._entity_id, self._name, False
+        )
 
 class MyPlaceIQAirconStateSensor(SensorEntity):
     """Sensor for MyPlaceIQ AC system on/off state."""
     _attr_device_class = SensorDeviceClass.POWER
     _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coordinator, config_entry, aircon_id: str, aircon_data: Dict[str, Any]):
+    def __init__(
+        self, coordinator, config_entry,
+        aircon_id: str, aircon_data: Dict[str, Any]
+    ):
         """Initialize the aircon state sensor."""
         super().__init__()
-        init_entity(self, coordinator, None, config_entry, aircon_id, aircon_data, "sensor")
+        init_entity(self, coordinator, None, config_entry, aircon_id,
+                   aircon_data, "sensor")
 
     @property
     def state(self) -> Optional[str]:
@@ -98,7 +119,9 @@ class MyPlaceIQAirconStateSensor(SensorEntity):
     @property
     def device_info(self) -> Dict[str, Any]:
         """Return device information."""
-        return get_device_info(self._config_entry.entry_id, self._entity_id, self._name, False)
+        return get_device_info(
+            self._config_entry.entry_id, self._entity_id, self._name, False
+        )
 
 class MyPlaceIQZoneSensor(SensorEntity):
     """Sensor for MyPlaceIQ zone temperature."""
@@ -106,10 +129,14 @@ class MyPlaceIQZoneSensor(SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_unit_of_measurement = UnitOfTemperature.CELSIUS
 
-    def __init__(self, coordinator, config_entry, zone_id: str, zone_data: Dict[str, Any], aircon_id: str):
+    def __init__(
+        self, coordinator, config_entry,
+        zone_id: str, zone_data: Dict[str, Any], aircon_id: str
+    ):
         """Initialize the zone temperature sensor."""
         super().__init__()
-        init_entity(self, coordinator, None, config_entry, zone_id, zone_data, "sensor", is_zone=True, aircon_id=aircon_id)
+        init_entity(self, coordinator, None, config_entry, zone_id,
+                   zone_data, "sensor", is_zone=True, aircon_id=aircon_id)
 
     @property
     def state(self) -> Optional[float]:
@@ -136,17 +163,24 @@ class MyPlaceIQZoneSensor(SensorEntity):
     @property
     def device_info(self) -> Dict[str, Any]:
         """Return device information."""
-        return get_device_info(self._config_entry.entry_id, self._entity_id, self._name, True, self._aircon_id)
+        return get_device_info(
+            self._config_entry.entry_id, self._entity_id,
+            self._name, True, self._aircon_id
+        )
 
 class MyPlaceIQZoneStateSensor(SensorEntity):
     """Sensor for MyPlaceIQ zone on/off state."""
     _attr_device_class = SensorDeviceClass.POWER
     _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coordinator, config_entry, zone_id: str, zone_data: Dict[str, Any], aircon_id: str):
+    def __init__(
+        self, coordinator, config_entry,
+        zone_id: str, zone_data: Dict[str, Any], aircon_id: str
+    ):
         """Initialize the zone state sensor."""
         super().__init__()
-        init_entity(self, coordinator, None, config_entry, zone_id, zone_data, "sensor", is_zone=True, aircon_id=aircon_id)
+        init_entity(self, coordinator, None, config_entry, zone_id,
+                   zone_data, "sensor", is_zone=True, aircon_id=aircon_id)
 
     @property
     def state(self) -> Optional[str]:
@@ -160,4 +194,7 @@ class MyPlaceIQZoneStateSensor(SensorEntity):
     @property
     def device_info(self) -> Dict[str, Any]:
         """Return device information."""
-        return get_device_info(self._config_entry.entry_id, self._entity_id, self._name, True, self._aircon_id)
+        return get_device_info(
+            self._config_entry.entry_id, self._entity_id,
+            self._name, True, self._aircon_id
+        )
