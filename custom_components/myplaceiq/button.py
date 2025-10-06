@@ -6,7 +6,7 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
 from .const import DOMAIN
-from .utils import parse_coordinator_data, get_device_info, setup_entities
+from .utils import parse_coordinator_data, get_device_info, setup_entities, init_entity, perform_optimistic_update
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,14 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
     myplaceiq = hass.data[DOMAIN][config_entry.entry_id]["myplaceiq"]
 
-    def create_entities(hass, config_entry, coordinator, entity_id: str, entity_data: Dict[str, Any], aircon_id: Optional[str] = None) -> List[ButtonEntity]:
+    def create_entities(
+        hass: HomeAssistant,  # Used for type hint
+        config_entry,
+        coordinator,
+        entity_id: str,
+        entity_data: Dict[str, Any],
+        aircon_id: Optional[str] = None
+    ) -> List[ButtonEntity]:
         """Create button entities for aircons and zones."""
         entities = []
         if aircon_id is None:  # Aircon buttons
@@ -74,43 +81,11 @@ class MyPlaceIQButton(ButtonEntity):
     ):
         """Initialize the button entity."""
         super().__init__()
-        self.coordinator = coordinator
-        self._myplaceiq = myplaceiq
-        self._config_entry = config_entry
-        self._entity_id = entity_id
+        init_entity(self, coordinator, myplaceiq, config_entry, entity_id, entity_data, "button", action, is_zone, aircon_id)
         self._action = action
         self._command_type = command_type
         self._command_params = command_params
         self._is_zone = is_zone
-        self._aircon_id = aircon_id if is_zone else entity_id
-        self._name = entity_data.get("name", "Zone" if is_zone else "Aircon")
-        self._attr_unique_id = f"{config_entry.entry_id}_{'zone' if is_zone else 'aircon'}_{entity_id}_{action}"
-        self._attr_name = f"{self._name}_{action}".replace(" ", "_").lower()
-        self._attr_icon = "mdi:toggle-switch" if is_zone or action == "toggle" else "mdi:thermostat"
-
-    def _perform_optimistic_update(self, body: Dict[str, Any], attribute: str, new_value: Any) -> None:
-        """Perform an optimistic update to coordinator.data."""
-        entity_type = "zones" if self._is_zone else "aircons"
-        sensor_type = "state" if attribute == "isOn" else "mode"
-        if entity_type in body and self._entity_id in body[entity_type]:
-            body[entity_type][self._entity_id][attribute] = new_value
-            self.coordinator.data = {"body": json.dumps(body)}
-            state_sensor_id = f"sensor.{self._name.lower().replace(' ', '_')}_{sensor_type}"
-            self.hass.async_create_task(
-                self.hass.services.async_call(
-                    "homeassistant", "update_entity",
-                    {"entity_id": state_sensor_id}
-                )
-            )
-            logger.debug(
-                "Optimistically updated %s %s %s to %s",
-                entity_type[:-1], self._entity_id, attribute, new_value
-            )
-        else:
-            logger.warning(
-                "Could not perform optimistic update for %s %s %s: not found in data",
-                entity_type[:-1], self._entity_id, attribute
-            )
 
     async def async_press(self) -> None:
         """Handle button press for AC or zone commands."""
@@ -128,11 +103,10 @@ class MyPlaceIQButton(ButtonEntity):
                 "airconId": self._entity_id,
                 "isOn": new_state
             })
-            self._perform_optimistic_update(body, "isOn", new_state)
-            logger.debug(
-                "Sent toggle command for aircon %s to isOn=%s",
-                self._entity_id, new_state
+            perform_optimistic_update(
+                self.hass, self.coordinator, "aircon", self._entity_id, "isOn", new_state
             )
+            logger.debug("Sent toggle command for aircon %s to isOn=%s", self._entity_id, new_state)
         elif self._command_type == "SetZoneOpenClose" and self._action == "toggle":
             zone = body.get("zones", {}).get(self._entity_id, {})
             new_state = not zone.get("isOn", False)
@@ -141,11 +115,10 @@ class MyPlaceIQButton(ButtonEntity):
                 "zoneId": self._entity_id,
                 "isOpen": new_state
             })
-            self._perform_optimistic_update(body, "isOn", new_state)
-            logger.debug(
-                "Sent toggle command for zone %s to isOpen=%s",
-                self._entity_id, new_state
+            perform_optimistic_update(
+                self.hass, self.coordinator, "zone", self._entity_id, "isOn", new_state
             )
+            logger.debug("Sent toggle command for zone %s to isOpen=%s", self._entity_id, new_state)
         else:
             command["commands"].append({
                 "__type": self._command_type,
@@ -153,11 +126,11 @@ class MyPlaceIQButton(ButtonEntity):
                 **(self._command_params or {})
             })
             if self._command_type == "SetAirconMode":
-                self._perform_optimistic_update(body, "mode", self._command_params["mode"])
-            logger.debug(
-                "Sent %s command for aircon %s: %s",
-                self._action, self._entity_id, self._command_params
-            )
+                perform_optimistic_update(
+                    self.hass, self.coordinator, "aircon", self._entity_id,
+                    "mode", self._command_params["mode"]
+                )
+            logger.debug("Sent %s command for aircon %s: %s", self._action, self._entity_id, self._command_params)
 
         await self._myplaceiq.send_command(command)
         self.hass.async_create_task(self.coordinator.async_request_refresh())

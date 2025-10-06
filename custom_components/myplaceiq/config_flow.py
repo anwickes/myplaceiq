@@ -34,11 +34,13 @@ class MyPlaceIQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 myplaceiq = MyPlaceIQ(
-                    hass=self.hass,
-                    host=user_input[CONF_HOST],
-                    port=user_input[CONF_PORT],
-                    client_id=user_input[CONF_CLIENT_ID],
-                    client_secret=user_input[CONF_CLIENT_SECRET]
+                    self.hass,
+                    {
+                        "host": user_input[CONF_HOST],
+                        "port": user_input[CONF_PORT],
+                        "client_id": user_input[CONF_CLIENT_ID],
+                        "client_secret": user_input[CONF_CLIENT_SECRET]
+                    }
                 )
                 await myplaceiq.validate_connection()
                 await self.async_set_unique_id(f"{DOMAIN}_{user_input[CONF_CLIENT_ID]}")
@@ -51,9 +53,9 @@ class MyPlaceIQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except ClientConnectorError as err:
                 logger.error("Connection error during config flow: %s", err)
                 errors["base"] = "cannot_connect"
-            except Exception as err:  # pylint: disable=broad-except
-                logger.error("Unexpected error during config flow: %s", err)
-                errors["base"] = "unknown"
+            except ValueError as err:
+                logger.error("Invalid input during config flow: %s", err)
+                errors["base"] = "invalid_auth"
 
         return self.async_show_form(
             step_id="user", data_schema=CONFIG_SCHEMA, errors=errors
@@ -101,9 +103,9 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
             except ClientConnectorError as err:
                 logger.error("Connection error during options flow: %s", err)
                 errors["base"] = "cannot_connect"
-            except Exception as err:  # pylint: disable=broad-except
-                logger.error("Unexpected error during options flow: %s", err)
-                errors["base"] = "unknown"
+            except ValueError as err:
+                logger.error("Invalid input during options flow: %s", err)
+                errors["base"] = "invalid_auth"
 
         return self.async_show_form(
             step_id="init",

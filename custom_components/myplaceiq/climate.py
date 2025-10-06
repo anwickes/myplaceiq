@@ -7,7 +7,7 @@ from homeassistant.components.climate import (
 )
 from homeassistant.const import UnitOfTemperature
 from .const import DOMAIN
-from .utils import parse_coordinator_data, get_device_info, setup_entities
+from .utils import parse_coordinator_data, get_device_info, setup_entities, init_entity, perform_optimistic_update
 
 logger = logging.getLogger(__name__)
 
@@ -17,16 +17,23 @@ async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     myplaceiq = hass.data[DOMAIN][entry.entry_id]["myplaceiq"]
 
-    def create_entities(hass, config_entry, coordinator, entity_id: str, entity_data: Dict[str, Any], aircon_id: Optional[str] = None) -> List[ClimateEntity]:
+    def create_entities(
+        hass: HomeAssistant,  # Used for type hint
+        config_entry,
+        coordinator,
+        entity_id: str,
+        entity_data: Dict[str, Any],
+        aircon_id: Optional[str] = None
+    ) -> List[ClimateEntity]:
         """Create climate entities for aircons and zones."""
         entities = []
         if aircon_id is None:  # Aircon climate
             entities.append(MyPlaceIQClimate(
-                coordinator, myplaceiq, config_entry, entity_id, entity_data, False
+                coordinator, config_entry, myplaceiq, entity_id, entity_data, False
             ))
         else:  # Zone climate
             entities.append(MyPlaceIQClimate(
-                coordinator, myplaceiq, config_entry, entity_id, entity_data, True, aircon_id
+                coordinator, config_entry, myplaceiq, entity_id, entity_data, True, aircon_id
             ))
         return entities
 
@@ -44,8 +51,8 @@ class MyPlaceIQClimate(ClimateEntity):
     def __init__(
         self,
         coordinator,
-        myplaceiq,
         config_entry,
+        myplaceiq,
         entity_id: str,
         entity_data: Dict[str, Any],
         is_zone: bool = False,
@@ -53,37 +60,12 @@ class MyPlaceIQClimate(ClimateEntity):
     ):
         """Initialize the climate entity."""
         super().__init__()
-        self.coordinator = coordinator
-        self._myplaceiq = myplaceiq
-        self._config_entry = config_entry
-        self._entity_id = entity_id
+        init_entity(self, coordinator, myplaceiq, config_entry, entity_id, entity_data, "climate", is_zone=is_zone, aircon_id=aircon_id)
         self._is_zone = is_zone
-        self._aircon_id = aircon_id if is_zone else entity_id
-        self._name = entity_data.get("name", "Zone" if is_zone else "Aircon")
-        self._attr_unique_id = f"{config_entry.entry_id}_{'zone' if is_zone else 'aircon'}_{entity_id}_climate"
-        self._attr_name = f"{self._name}_climate".replace(" ", "_").lower()
-        self._attr_icon = "mdi:thermostat"
         self._attr_hvac_modes = (
             [HVACMode.AUTO, HVACMode.OFF] if is_zone else
             [HVACMode.HEAT, HVACMode.COOL, HVACMode.DRY, HVACMode.FAN_ONLY, HVACMode.OFF]
         )
-
-    def _perform_optimistic_update(self, body: Dict[str, Any], attribute: str, new_value: Any) -> None:
-        """Perform an optimistic update to coordinator.data."""
-        entity_type = "zones" if self._is_zone else "aircons"
-        if entity_type in body and self._entity_id in body[entity_type]:
-            body[entity_type][self._entity_id][attribute] = new_value
-            self.coordinator.data = {"body": json.dumps(body)}
-            self.async_write_ha_state()
-            logger.debug(
-                "Optimistically updated %s %s %s to %s",
-                entity_type[:-1], self._entity_id, attribute, new_value
-            )
-        else:
-            logger.warning(
-                "Could not perform optimistic update for %s %s %s: not found in data",
-                entity_type[:-1], self._entity_id, attribute
-            )
 
     @property
     def device_info(self) -> Dict[str, Any]:
@@ -162,8 +144,10 @@ class MyPlaceIQClimate(ClimateEntity):
             }]
         }
 
-        self._perform_optimistic_update(
-            body, "targetTemperatureHeat" if mode == "heat" else "targetTemperatureCool", int(temperature)
+        perform_optimistic_update(
+            self.hass, self.coordinator, "zone" if self._is_zone else "aircon",
+            self._entity_id, "targetTemperatureHeat" if mode == "heat" else "targetTemperatureCool",
+            int(temperature)
         )
         await self._myplaceiq.send_command(command)
         self.hass.async_create_task(self.coordinator.async_request_refresh())
@@ -188,7 +172,9 @@ class MyPlaceIQClimate(ClimateEntity):
                 "zoneId": self._entity_id,
                 "isOpen": new_state
             })
-            self._perform_optimistic_update(body, "isOn", new_state)
+            perform_optimistic_update(
+                self.hass, self.coordinator, "zone", self._entity_id, "isOn", new_state
+            )
         else:
             if hvac_mode == HVACMode.OFF:
                 command["commands"].append({
@@ -196,7 +182,9 @@ class MyPlaceIQClimate(ClimateEntity):
                     "airconId": self._entity_id,
                     "isOn": False
                 })
-                self._perform_optimistic_update(body, "isOn", False)
+                perform_optimistic_update(
+                    self.hass, self.coordinator, "aircon", self._entity_id, "isOn", False
+                )
             else:
                 mode_map = {
                     HVACMode.HEAT: "heat",
@@ -216,8 +204,13 @@ class MyPlaceIQClimate(ClimateEntity):
                         "mode": mode_map.get(hvac_mode, "heat")
                     }
                 ])
-                self._perform_optimistic_update(body, "isOn", True)
-                self._perform_optimistic_update(body, "mode", mode_map.get(hvac_mode, "heat"))
+                perform_optimistic_update(
+                    self.hass, self.coordinator, "aircon", self._entity_id, "isOn", True
+                )
+                perform_optimistic_update(
+                    self.hass, self.coordinator, "aircon", self._entity_id,
+                    "mode", mode_map.get(hvac_mode, "heat")
+                )
 
         await self._myplaceiq.send_command(command)
         self.hass.async_create_task(self.coordinator.async_request_refresh())
