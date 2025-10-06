@@ -3,6 +3,8 @@ import logging
 from typing import Dict, Any
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
+from aiohttp.client_exceptions import ClientConnectorError
+from homeassistant.exceptions import ConfigEntryNotReady
 from .const import (
     DOMAIN, CONF_HOST, CONF_PORT, CONF_CLIENT_ID,
     CONF_CLIENT_SECRET, CONF_POLL_INTERVAL
@@ -22,11 +24,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     logger.debug("Setting up MyPlaceIQ entry: %s", entry.entry_id)
     try:
         myplaceiq = MyPlaceIQ(
-            hass=hass,
-            host=entry.data[CONF_HOST],
-            port=entry.data.get(CONF_PORT, 8086),
-            client_id=entry.data[CONF_CLIENT_ID],
-            client_secret=entry.data[CONF_CLIENT_SECRET]
+            hass,
+            {
+                "host": entry.data[CONF_HOST],
+                "port": entry.data.get(CONF_PORT, 8086),
+                "client_id": entry.data[CONF_CLIENT_ID],
+                "client_secret": entry.data[CONF_CLIENT_SECRET]
+            }
         )
         coordinator = MyPlaceIQDataUpdateCoordinator(
             hass,
@@ -42,9 +46,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry, ["sensor", "button", "climate"]
         )
         return True
-    except Exception as err:  # pylint: disable=broad-except
-        logger.error("Failed to set up MyPlaceIQ integration: %s", err)
-        raise
+    except ClientConnectorError as err:
+        logger.error("Failed to connect to MyPlaceIQ: %s", err)
+        raise ConfigEntryNotReady(f"Cannot connect to {entry.data[CONF_HOST]}: {err}") from err
+    except ValueError as err:
+        logger.error("Invalid configuration for MyPlaceIQ: %s", err)
+        raise ConfigEntryNotReady(f"Invalid configuration: {err}") from err
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""

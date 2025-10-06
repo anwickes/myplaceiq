@@ -6,7 +6,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import UnitOfTemperature
 from .const import DOMAIN
-from .utils import parse_coordinator_data, get_device_info, setup_entities
+from .utils import parse_coordinator_data, get_device_info, setup_entities, init_entity
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,14 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     logger.debug("Setting up sensor entities for MyPlaceIQ")
     coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
 
-    def create_entities(hass, config_entry, coordinator, entity_id: str, entity_data: Dict[str, Any], aircon_id: Optional[str] = None) -> List[SensorEntity]:
+    def create_entities(
+        hass: HomeAssistant,  # Used for type hint
+        config_entry,
+        coordinator,
+        entity_id: str,
+        entity_data: Dict[str, Any],
+        aircon_id: Optional[str] = None
+    ) -> List[SensorEntity]:
         """Create sensor entities for aircons and zones."""
         entities = []
         if aircon_id is None:  # Aircon sensors
@@ -39,13 +46,7 @@ class MyPlaceIQAirconSensor(SensorEntity):
     def __init__(self, coordinator, config_entry, aircon_id: str, aircon_data: Dict[str, Any]):
         """Initialize the aircon mode sensor."""
         super().__init__()
-        self.coordinator = coordinator
-        self._config_entry = config_entry
-        self._aircon_id = aircon_id
-        self._name = aircon_data.get("name", "Aircon")
-        self._attr_unique_id = f"{config_entry.entry_id}_aircon_{aircon_id}_mode"
-        self._attr_name = f"{self._name}_mode".replace(" ", "_").lower()
-        self._attr_icon = "mdi:air-conditioner"
+        init_entity(self, coordinator, None, config_entry, aircon_id, aircon_data, "sensor")
 
     @property
     def state(self) -> Optional[str]:
@@ -53,7 +54,7 @@ class MyPlaceIQAirconSensor(SensorEntity):
         body = parse_coordinator_data(self.coordinator.data)
         if not body:
             return None
-        aircon = body.get("aircons", {}).get(self._aircon_id, {})
+        aircon = body.get("aircons", {}).get(self._entity_id, {})
         return aircon.get("mode", "unknown") if aircon.get("isOn", False) else "off"
 
     @property
@@ -62,7 +63,7 @@ class MyPlaceIQAirconSensor(SensorEntity):
         body = parse_coordinator_data(self.coordinator.data)
         if not body:
             return {}
-        aircon = body.get("aircons", {}).get(self._aircon_id, {})
+        aircon = body.get("aircons", {}).get(self._entity_id, {})
         return {
             "is_on": aircon.get("isOn", False),
             "actual_temperature": aircon.get("actualTemperature"),
@@ -73,7 +74,7 @@ class MyPlaceIQAirconSensor(SensorEntity):
     @property
     def device_info(self) -> Dict[str, Any]:
         """Return device information."""
-        return get_device_info(self._config_entry.entry_id, self._aircon_id, self._name, False)
+        return get_device_info(self._config_entry.entry_id, self._entity_id, self._name, False)
 
 class MyPlaceIQAirconStateSensor(SensorEntity):
     """Sensor for MyPlaceIQ AC system on/off state."""
@@ -83,13 +84,7 @@ class MyPlaceIQAirconStateSensor(SensorEntity):
     def __init__(self, coordinator, config_entry, aircon_id: str, aircon_data: Dict[str, Any]):
         """Initialize the aircon state sensor."""
         super().__init__()
-        self.coordinator = coordinator
-        self._config_entry = config_entry
-        self._aircon_id = aircon_id
-        self._name = aircon_data.get("name", "Aircon")
-        self._attr_unique_id = f"{config_entry.entry_id}_aircon_{aircon_id}_state"
-        self._attr_name = f"{self._name}_state".replace(" ", "_").lower()
-        self._attr_icon = "mdi:power"
+        init_entity(self, coordinator, None, config_entry, aircon_id, aircon_data, "sensor")
 
     @property
     def state(self) -> Optional[str]:
@@ -97,13 +92,13 @@ class MyPlaceIQAirconStateSensor(SensorEntity):
         body = parse_coordinator_data(self.coordinator.data)
         if not body:
             return None
-        aircon = body.get("aircons", {}).get(self._aircon_id, {})
+        aircon = body.get("aircons", {}).get(self._entity_id, {})
         return "on" if aircon.get("isOn", False) else "off"
 
     @property
     def device_info(self) -> Dict[str, Any]:
         """Return device information."""
-        return get_device_info(self._config_entry.entry_id, self._aircon_id, self._name, False)
+        return get_device_info(self._config_entry.entry_id, self._entity_id, self._name, False)
 
 class MyPlaceIQZoneSensor(SensorEntity):
     """Sensor for MyPlaceIQ zone temperature."""
@@ -114,14 +109,7 @@ class MyPlaceIQZoneSensor(SensorEntity):
     def __init__(self, coordinator, config_entry, zone_id: str, zone_data: Dict[str, Any], aircon_id: str):
         """Initialize the zone temperature sensor."""
         super().__init__()
-        self.coordinator = coordinator
-        self._config_entry = config_entry
-        self._zone_id = zone_id
-        self._aircon_id = aircon_id
-        self._name = zone_data.get("name", "Zone")
-        self._attr_unique_id = f"{config_entry.entry_id}_zone_{zone_id}_temperature"
-        self._attr_name = f"{self._name}_temperature".replace(" ", "_").lower()
-        self._attr_icon = "mdi:thermostat"
+        init_entity(self, coordinator, None, config_entry, zone_id, zone_data, "sensor", is_zone=True, aircon_id=aircon_id)
 
     @property
     def state(self) -> Optional[float]:
@@ -129,7 +117,7 @@ class MyPlaceIQZoneSensor(SensorEntity):
         body = parse_coordinator_data(self.coordinator.data)
         if not body:
             return None
-        zone = body.get("zones", {}).get(self._zone_id, {})
+        zone = body.get("zones", {}).get(self._entity_id, {})
         return zone.get("temperatureSensorValue")
 
     @property
@@ -138,7 +126,7 @@ class MyPlaceIQZoneSensor(SensorEntity):
         body = parse_coordinator_data(self.coordinator.data)
         if not body:
             return {}
-        zone = body.get("zones", {}).get(self._zone_id, {})
+        zone = body.get("zones", {}).get(self._entity_id, {})
         return {
             "is_on": zone.get("isOn", False),
             "target_temperature_heat": zone.get("targetTemperatureHeat"),
@@ -148,7 +136,7 @@ class MyPlaceIQZoneSensor(SensorEntity):
     @property
     def device_info(self) -> Dict[str, Any]:
         """Return device information."""
-        return get_device_info(self._config_entry.entry_id, self._zone_id, self._name, True, self._aircon_id)
+        return get_device_info(self._config_entry.entry_id, self._entity_id, self._name, True, self._aircon_id)
 
 class MyPlaceIQZoneStateSensor(SensorEntity):
     """Sensor for MyPlaceIQ zone on/off state."""
@@ -158,14 +146,7 @@ class MyPlaceIQZoneStateSensor(SensorEntity):
     def __init__(self, coordinator, config_entry, zone_id: str, zone_data: Dict[str, Any], aircon_id: str):
         """Initialize the zone state sensor."""
         super().__init__()
-        self.coordinator = coordinator
-        self._config_entry = config_entry
-        self._zone_id = zone_id
-        self._aircon_id = aircon_id
-        self._name = zone_data.get("name", "Zone")
-        self._attr_unique_id = f"{config_entry.entry_id}_zone_{zone_id}_state"
-        self._attr_name = f"{self._name}_state".replace(" ", "_").lower()
-        self._attr_icon = "mdi:toggle-switch"
+        init_entity(self, coordinator, None, config_entry, zone_id, zone_data, "sensor", is_zone=True, aircon_id=aircon_id)
 
     @property
     def state(self) -> Optional[str]:
@@ -173,10 +154,10 @@ class MyPlaceIQZoneStateSensor(SensorEntity):
         body = parse_coordinator_data(self.coordinator.data)
         if not body:
             return None
-        zone = body.get("zones", {}).get(self._zone_id, {})
+        zone = body.get("zones", {}).get(self._entity_id, {})
         return "on" if zone.get("isOn", False) else "off"
 
     @property
     def device_info(self) -> Dict[str, Any]:
         """Return device information."""
-        return get_device_info(self._config_entry.entry_id, self._zone_id, self._name, True, self._aircon_id)
+        return get_device_info(self._config_entry.entry_id, self._entity_id, self._name, True, self._aircon_id)
