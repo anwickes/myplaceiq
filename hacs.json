@@ -9,6 +9,8 @@
   "iot_class": "local_polling",
   "codeowners": ["@anwickes"],
   "config_flow": true,
-  "dependencies": ["climate"],
-  "integration_type": "hub"
+  "integration_type": "hub",
+  "homeassistant": {
+    "logo": "images/logo.png"
+  }
 }
