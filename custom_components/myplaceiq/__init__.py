@@ -3,8 +3,8 @@ import logging
 from typing import Dict, Any
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from aiohttp.client_exceptions import ClientConnectorError
 from homeassistant.exceptions import ConfigEntryNotReady
+from aiohttp.client_exceptions import ClientConnectorError
 from .const import (
     DOMAIN, CONF_HOST, CONF_PORT, CONF_CLIENT_ID,
     CONF_CLIENT_SECRET, CONF_POLL_INTERVAL
@@ -14,7 +14,7 @@ from .myplaceiq import MyPlaceIQ
 
 logger = logging.getLogger(__name__)
 
-async def async_setup(hass: HomeAssistant, config: Dict[str, Any]) -> bool:
+async def async_setup(hass: HomeAssistant, config: Dict) -> bool:
     """Set up the MyPlaceIQ integration."""
     hass.data.setdefault(DOMAIN, {})
     return True

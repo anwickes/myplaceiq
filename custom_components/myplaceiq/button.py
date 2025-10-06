@@ -1,7 +1,7 @@
 """Button entities for MyPlaceIQ integration."""
-import json
 import logging
 from typing import Dict, Any, Optional, List
+from homeassistant.core import HomeAssistant
 from homeassistant.components.button import ButtonEntity
 from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
@@ -10,14 +10,14 @@ from .utils import parse_coordinator_data, get_device_info, setup_entities, init
 
 logger = logging.getLogger(__name__)
 
-async def async_setup_entry(hass, config_entry, async_add_entities):
+async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entities):
     """Set up MyPlaceIQ button entities from a config entry."""
     logger.debug("Setting up button entities for MyPlaceIQ")
     coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
     myplaceiq = hass.data[DOMAIN][config_entry.entry_id]["myplaceiq"]
 
     def create_entities(
-        hass: HomeAssistant,  # Used for type hint
+        _hass: HomeAssistant,  # Type hint only
         config_entry,
         coordinator,
         entity_id: str,
@@ -29,32 +29,51 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         if aircon_id is None:  # Aircon buttons
             entities.extend([
                 MyPlaceIQButton(
-                    coordinator, config_entry, myplaceiq, entity_id, entity_data,
-                    "toggle", "SetAirconOnOff", None, False
+                    coordinator, config_entry, myplaceiq, {
+                        'entity_id': entity_id, 'entity_data': entity_data,
+                        'action': "toggle", 'command_type': "SetAirconOnOff",
+                        'command_params': None, 'is_zone': False
+                    }
                 ),
                 MyPlaceIQButton(
-                    coordinator, config_entry, myplaceiq, entity_id, entity_data,
-                    "mode_heat", "SetAirconMode", {"mode": "heat"}, False
+                    coordinator, config_entry, myplaceiq, {
+                        'entity_id': entity_id, 'entity_data': entity_data,
+                        'action': "mode_heat", 'command_type': "SetAirconMode",
+                        'command_params': {"mode": "heat"}, 'is_zone': False
+                    }
                 ),
                 MyPlaceIQButton(
-                    coordinator, config_entry, myplaceiq, entity_id, entity_data,
-                    "mode_cool", "SetAirconMode", {"mode": "cool"}, False
+                    coordinator, config_entry, myplaceiq, {
+                        'entity_id': entity_id, 'entity_data': entity_data,
+                        'action': "mode_cool", 'command_type': "SetAirconMode",
+                        'command_params': {"mode": "cool"}, 'is_zone': False
+                    }
                 ),
                 MyPlaceIQButton(
-                    coordinator, config_entry, myplaceiq, entity_id, entity_data,
-                    "mode_dry", "SetAirconMode", {"mode": "dry"}, False
+                    coordinator, config_entry, myplaceiq, {
+                        'entity_id': entity_id, 'entity_data': entity_data,
+                        'action': "mode_dry", 'command_type': "SetAirconMode",
+                        'command_params': {"mode": "dry"}, 'is_zone': False
+                    }
                 ),
                 MyPlaceIQButton(
-                    coordinator, config_entry, myplaceiq, entity_id, entity_data,
-                    "mode_fan", "SetAirconMode", {"mode": "fan"}, False
+                    coordinator, config_entry, myplaceiq, {
+                        'entity_id': entity_id, 'entity_data': entity_data,
+                        'action': "mode_fan", 'command_type': "SetAirconMode",
+                        'command_params': {"mode": "fan"}, 'is_zone': False
+                    }
                 )
             ])
         else:  # Zone buttons
             if entity_data.get("isClickable", False):
                 entities.append(
                     MyPlaceIQButton(
-                        coordinator, config_entry, myplaceiq, entity_id, entity_data,
-                        "toggle", "SetZoneOpenClose", None, True, aircon_id
+                        coordinator, config_entry, myplaceiq, {
+                            'entity_id': entity_id, 'entity_data': entity_data,
+                            'action': "toggle", 'command_type': "SetZoneOpenClose",
+                            'command_params': None, 'is_zone': True,
+                            'aircon_id': aircon_id
+                        }
                     )
                 )
         return entities
@@ -71,21 +90,15 @@ class MyPlaceIQButton(ButtonEntity):
         coordinator,
         config_entry,
         myplaceiq,
-        entity_id: str,
-        entity_data: Dict[str, Any],
-        action: str,
-        command_type: str,
-        command_params: Optional[Dict[str, Any]] = None,
-        is_zone: bool = False,
-        aircon_id: Optional[str] = None
+        config: Dict[str, Any]
     ):
         """Initialize the button entity."""
         super().__init__()
-        init_entity(self, coordinator, myplaceiq, config_entry, entity_id, entity_data, "button", action, is_zone, aircon_id)
-        self._action = action
-        self._command_type = command_type
-        self._command_params = command_params
-        self._is_zone = is_zone
+        init_entity(self, coordinator, myplaceiq, config_entry, config)
+        self._action = config['action']
+        self._command_type = config['command_type']
+        self._command_params = config['command_params']
+        self._is_zone = config['is_zone']
 
     async def async_press(self) -> None:
         """Handle button press for AC or zone commands."""
@@ -104,9 +117,13 @@ class MyPlaceIQButton(ButtonEntity):
                 "isOn": new_state
             })
             perform_optimistic_update(
-                self.hass, self.coordinator, "aircon", self._entity_id, "isOn", new_state
+                self.hass, self.coordinator, {
+                    'entity_type': "aircon", 'entity_id': self._entity_id,
+                    'attribute': "isOn", 'new_value': new_state
+                }
             )
-            logger.debug("Sent toggle command for aircon %s to isOn=%s", self._entity_id, new_state)
+            logger.debug("Sent toggle command for aircon %s to isOn=%s",
+                         self._entity_id, new_state)
         elif self._command_type == "SetZoneOpenClose" and self._action == "toggle":
             zone = body.get("zones", {}).get(self._entity_id, {})
             new_state = not zone.get("isOn", False)
@@ -116,9 +133,13 @@ class MyPlaceIQButton(ButtonEntity):
                 "isOpen": new_state
             })
             perform_optimistic_update(
-                self.hass, self.coordinator, "zone", self._entity_id, "isOn", new_state
+                self.hass, self.coordinator, {
+                    'entity_type': "zone", 'entity_id': self._entity_id,
+                    'attribute': "isOn", 'new_value': new_state
+                }
             )
-            logger.debug("Sent toggle command for zone %s to isOpen=%s", self._entity_id, new_state)
+            logger.debug("Sent toggle command for zone %s to isOpen=%s",
+                         self._entity_id, new_state)
         else:
             command["commands"].append({
                 "__type": self._command_type,
@@ -127,10 +148,13 @@ class MyPlaceIQButton(ButtonEntity):
             })
             if self._command_type == "SetAirconMode":
                 perform_optimistic_update(
-                    self.hass, self.coordinator, "aircon", self._entity_id,
-                    "mode", self._command_params["mode"]
+                    self.hass, self.coordinator, {
+                        'entity_type': "aircon", 'entity_id': self._entity_id,
+                        'attribute': "mode", 'new_value': self._command_params["mode"]
+                    }
                 )
-            logger.debug("Sent %s command for aircon %s: %s", self._action, self._entity_id, self._command_params)
+            logger.debug("Sent %s command for aircon %s: %s",
+                         self._action, self._entity_id, self._command_params)
 
         await self._myplaceiq.send_command(command)
         self.hass.async_create_task(self.coordinator.async_request_refresh())
@@ -138,7 +162,10 @@ class MyPlaceIQButton(ButtonEntity):
     @property
     def device_info(self) -> Dict[str, Any]:
         """Return device information."""
-        return get_device_info(
-            self._config_entry.entry_id, self._entity_id,
-            self._name, self._is_zone, self._aircon_id
-        )
+        return get_device_info({
+            'config_entry_id': self._config_entry.entry_id,
+            'entity_id': self._entity_id,
+            'name': self._name,
+            'is_zone': self._is_zone,
+            'aircon_id': self._aircon_id
+        })

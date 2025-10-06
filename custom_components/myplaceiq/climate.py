@@ -1,7 +1,7 @@
 """Climate entities for MyPlaceIQ integration."""
-import json
 import logging
 from typing import Dict, Any, Optional, List
+from homeassistant.core import HomeAssistant
 from homeassistant.components.climate import (
     ClimateEntity, ClimateEntityFeature, HVACMode
 )
@@ -11,14 +11,14 @@ from .utils import parse_coordinator_data, get_device_info, setup_entities, init
 
 logger = logging.getLogger(__name__)
 
-async def async_setup_entry(hass, entry, async_add_entities):
+async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities):
     """Set up MyPlaceIQ climate entities from a config entry."""
     logger.debug("Setting up climate entities for MyPlaceIQ")
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     myplaceiq = hass.data[DOMAIN][entry.entry_id]["myplaceiq"]
 
     def create_entities(
-        hass: HomeAssistant,  # Used for type hint
+        _hass: HomeAssistant,  # Type hint only
         config_entry,
         coordinator,
         entity_id: str,
@@ -29,11 +29,17 @@ async def async_setup_entry(hass, entry, async_add_entities):
         entities = []
         if aircon_id is None:  # Aircon climate
             entities.append(MyPlaceIQClimate(
-                coordinator, config_entry, myplaceiq, entity_id, entity_data, False
+                coordinator, config_entry, myplaceiq, {
+                    'entity_id': entity_id, 'entity_data': entity_data,
+                    'is_zone': False
+                }
             ))
         else:  # Zone climate
             entities.append(MyPlaceIQClimate(
-                coordinator, config_entry, myplaceiq, entity_id, entity_data, True, aircon_id
+                coordinator, config_entry, myplaceiq, {
+                    'entity_id': entity_id, 'entity_data': entity_data,
+                    'is_zone': True, 'aircon_id': aircon_id
+                }
             ))
         return entities
 
@@ -53,27 +59,28 @@ class MyPlaceIQClimate(ClimateEntity):
         coordinator,
         config_entry,
         myplaceiq,
-        entity_id: str,
-        entity_data: Dict[str, Any],
-        is_zone: bool = False,
-        aircon_id: Optional[str] = None
+        config: Dict[str, Any]
     ):
         """Initialize the climate entity."""
         super().__init__()
-        init_entity(self, coordinator, myplaceiq, config_entry, entity_id, entity_data, "climate", is_zone=is_zone, aircon_id=aircon_id)
-        self._is_zone = is_zone
+        init_entity(self, coordinator, myplaceiq, config_entry, config)
+        self._is_zone = config['is_zone']
         self._attr_hvac_modes = (
-            [HVACMode.AUTO, HVACMode.OFF] if is_zone else
-            [HVACMode.HEAT, HVACMode.COOL, HVACMode.DRY, HVACMode.FAN_ONLY, HVACMode.OFF]
+            [HVACMode.AUTO, HVACMode.OFF] if self._is_zone else
+            [HVACMode.HEAT, HVACMode.COOL, HVACMode.DRY,
+             HVACMode.FAN_ONLY, HVACMode.OFF]
         )
 
     @property
     def device_info(self) -> Dict[str, Any]:
         """Return device information."""
-        return get_device_info(
-            self._config_entry.entry_id, self._entity_id,
-            self._name, self._is_zone, self._aircon_id
-        )
+        return get_device_info({
+            'config_entry_id': self._config_entry.entry_id,
+            'entity_id': self._entity_id,
+            'name': self._name,
+            'is_zone': self._is_zone,
+            'aircon_id': self._aircon_id
+        })
 
     @property
     def available(self) -> bool:
@@ -145,9 +152,12 @@ class MyPlaceIQClimate(ClimateEntity):
         }
 
         perform_optimistic_update(
-            self.hass, self.coordinator, "zone" if self._is_zone else "aircon",
-            self._entity_id, "targetTemperatureHeat" if mode == "heat" else "targetTemperatureCool",
-            int(temperature)
+            self.hass, self.coordinator, {
+                'entity_type': "zone" if self._is_zone else "aircon",
+                'entity_id': self._entity_id,
+                'attribute': "targetTemperatureHeat" if mode == "heat" else "targetTemperatureCool",
+                'new_value': int(temperature)
+            }
         )
         await self._myplaceiq.send_command(command)
         self.hass.async_create_task(self.coordinator.async_request_refresh())
@@ -173,7 +183,12 @@ class MyPlaceIQClimate(ClimateEntity):
                 "isOpen": new_state
             })
             perform_optimistic_update(
-                self.hass, self.coordinator, "zone", self._entity_id, "isOn", new_state
+                self.hass, self.coordinator, {
+                    'entity_type': "zone",
+                    'entity_id': self._entity_id,
+                    'attribute': "isOn",
+                    'new_value': new_state
+                }
             )
         else:
             if hvac_mode == HVACMode.OFF:
@@ -183,7 +198,12 @@ class MyPlaceIQClimate(ClimateEntity):
                     "isOn": False
                 })
                 perform_optimistic_update(
-                    self.hass, self.coordinator, "aircon", self._entity_id, "isOn", False
+                    self.hass, self.coordinator, {
+                        'entity_type': "aircon",
+                        'entity_id': self._entity_id,
+                        'attribute': "isOn",
+                        'new_value': False
+                    }
                 )
             else:
                 mode_map = {
@@ -205,11 +225,20 @@ class MyPlaceIQClimate(ClimateEntity):
                     }
                 ])
                 perform_optimistic_update(
-                    self.hass, self.coordinator, "aircon", self._entity_id, "isOn", True
+                    self.hass, self.coordinator, {
+                        'entity_type': "aircon",
+                        'entity_id': self._entity_id,
+                        'attribute': "isOn",
+                        'new_value': True
+                    }
                 )
                 perform_optimistic_update(
-                    self.hass, self.coordinator, "aircon", self._entity_id,
-                    "mode", mode_map.get(hvac_mode, "heat")
+                    self.hass, self.coordinator, {
+                        'entity_type': "aircon",
+                        'entity_id': self._entity_id,
+                        'attribute': "mode",
+                        'new_value': mode_map.get(hvac_mode, "heat")
+                    }
                 )
 
         await self._myplaceiq.send_command(command)
