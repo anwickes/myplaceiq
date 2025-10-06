@@ -1,16 +1,7 @@
 {
-  "content_in_root": false,
-  "domain": "myplaceiq",
   "name": "MyPlaceIQ",
-  "documentation": "https://github.com/anwickes/myplaceiq#myplaceiq",
-  "issue_tracker": "https://github.com/anwickes/myplaceiq/issues",
-  "requirements": ["aiohttp>=3.8.1"],
-  "version": "0.0.1",
-  "iot_class": "local_polling",
-  "codeowners": ["@anwickes"],
-  "config_flow": true,
-  "integration_type": "hub",
-  "homeassistant": {
-    "logo": "images/logo.png"
-  }
+  "content_in_root": true,
+  "filename": null,
+  "render_readme": true,
+  "homeassistant": "2024.6.0"
 }
