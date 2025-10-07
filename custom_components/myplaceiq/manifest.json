@@ -10,6 +10,6 @@
   "requirements": ["aiohttp>=3.8.1"],
   "version": "0.0.1",
   "brand": {
-    "logo": "custom_components/myplaceiq/images/logo.png"
+    "logo": "images/logo.png"
   }
 }
