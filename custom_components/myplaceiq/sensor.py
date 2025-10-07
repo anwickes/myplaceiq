@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up MyPlaceIQ sensor entities from a config entry."""
+    # pylint: disable=duplicate-code
     logger.debug("Setting up sensor entities for MyPlaceIQ")
     coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
     data = coordinator.data
@@ -26,6 +27,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     zones = body.get("zones", {})
 
     entities = []
+    # pylint: enable=duplicate-code
 
     # AC System Sensors (Mode and State)
     for aircon_id, aircon_data in aircons.items():

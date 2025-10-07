@@ -9,6 +9,7 @@ from .const import DOMAIN
 logger = logging.getLogger(__name__)
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
+    # pylint: disable=duplicate-code
     """Set up MyPlaceIQ button entities from a config entry."""
     logger.debug("Setting up button entities for MyPlaceIQ")
     coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
@@ -29,6 +30,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     zones = body.get("zones", {})
 
     entities = []
+    # pylint: enable=duplicate-code
 
     # AC System Buttons (Toggle and Modes)
     for aircon_id, aircon_data in aircons.items():

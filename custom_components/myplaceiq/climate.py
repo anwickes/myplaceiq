@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Set up MyPlaceIQ climate entities from a config entry."""
+    # pylint: disable=duplicate-code
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     myplaceiq = hass.data[DOMAIN][entry.entry_id]["myplaceiq"]
     data = coordinator.data
@@ -28,6 +29,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     zones = body.get("zones", {})
 
     entities = []
+    # pylint: enable=duplicate-code
+
     # System climate entity
     for aircon_id, aircon_data in aircons.items():
         entities.append(
