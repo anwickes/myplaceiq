@@ -43,7 +43,7 @@ class MyPlaceIQ:
             logger.error("Failed to connect to WebSocket %s: %s", self._ws_url, err)
             raise HomeAssistantError(f"Failed to connect to WebSocket: {err}") from err
 
-    async def send_command(self, command: dict = {}):
+    async def send_command(self, command: dict = {}): # pylint: disable=dangerous-default-value
         """Send command to iq hub via websocket."""
         logger.debug("Connecting to WebSocket at %s using command: %s", self._ws_url, command)
         session = None
