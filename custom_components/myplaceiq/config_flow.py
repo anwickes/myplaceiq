@@ -15,11 +15,11 @@ logger = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = vol.Schema({
     vol.Required(CONF_HOST, default="x.x.x.x"): str,
-    vol.Required(CONF_PORT, default=8086): 
+    vol.Required(CONF_PORT, default=8086):
         vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
     vol.Required(CONF_CLIENT_ID): str,
     vol.Required(CONF_CLIENT_SECRET): str,
-    vol.Optional(CONF_POLL_INTERVAL, default=60): 
+    vol.Optional(CONF_POLL_INTERVAL, default=60):
         vol.All(vol.Coerce(int), vol.Range(min=10, max=300)),
 })
 
@@ -41,7 +41,7 @@ class MyPlaceIQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 client_secret = user_input[CONF_CLIENT_SECRET]
                 poll_interval = user_input.get(CONF_POLL_INTERVAL, 60)
 
-                # Test connection (optional, can be implemented 
+                # Test connection (optional, can be implemented
                 #   if MyPlaceIQ supports a test endpoint)
                 await self.async_set_unique_id(f"{DOMAIN}_{client_id}")
                 self._abort_if_unique_id_configured()
@@ -58,7 +58,7 @@ class MyPlaceIQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_POLL_INTERVAL: poll_interval,
                     },
                 )
-            except Exception as err:
+            except Exception as err: # pylint: disable=broad-except
                 logger.error("Error during config flow: %s", err)
                 errors["base"] = "unknown"
 
@@ -126,7 +126,7 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
                         },
                     )
                     return self.async_create_entry(title="", data={})
-            except Exception as err:
+            except Exception as err: # pylint: disable=broad-except
                 logger.error("Error during options flow: %s", err)
                 errors["base"] = "unknown"
 
@@ -141,11 +141,11 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
             step_id="init",
             data_schema=vol.Schema({
                 vol.Required(CONF_HOST, default=current_host): str,
-                vol.Required(CONF_PORT, default=current_port): 
+                vol.Required(CONF_PORT, default=current_port):
                     vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
                 vol.Required(CONF_CLIENT_ID, default=current_client_id): str,
                 vol.Required(CONF_CLIENT_SECRET, default=current_client_secret): str,
-                vol.Optional(CONF_POLL_INTERVAL, default=current_poll_interval): 
+                vol.Optional(CONF_POLL_INTERVAL, default=current_poll_interval):
                     vol.All(vol.Coerce(int), vol.Range(min=10, max=300)),
             }),
             errors=errors,

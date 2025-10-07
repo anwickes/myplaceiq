@@ -94,8 +94,9 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     for aircon_id, aircon_data in aircons.items():
         for zone_id in aircon_data.get("zoneOrder", []):
             zone_data = zones.get(zone_id)
-            if zone_data and zone_data.get("isVisible", False) and 
-                zone_data.get("isClickable", False):
+            if (zone_data and 
+                zone_data.get("isVisible", False) and 
+                zone_data.get("isClickable", False)):
                 entities.append(
                     MyPlaceIQButton(
                         coordinator=coordinator,
