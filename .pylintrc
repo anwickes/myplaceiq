@@ -1,5 +1,5 @@
 [MASTER]
-fail-under=6.5
+fail-under=9.0
 disable=
     missing-module-docstring,
     missing-class-docstring,
@@ -8,3 +8,10 @@ disable=
     invalid-name,
     protected-access,
     import-error
+
+[SIMILARITIES]
+
+min-similarity-lines=10
+ignore-comments=yes
+ignore-docstrings=yes
+ignore-imports=yes

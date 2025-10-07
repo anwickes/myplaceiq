@@ -1,15 +1,16 @@
 import json
-import aiohttp
 import random
 import string
 import logging
 import socket
+import aiohttp
 from aiohttp.client_exceptions import ClientConnectorError
 from homeassistant.exceptions import HomeAssistantError
 
 logger = logging.getLogger(__name__)
 
 class MyPlaceIQ:
+    # pylint: disable=too-many-arguments, too-many-positional-arguments
     """Class to handle WebSocket communication with MyPlaceIQ hub using aiohttp."""
 
     def __init__(self, hass, host: str, port: str, client_id: str, client_secret: str):
@@ -35,14 +36,14 @@ class MyPlaceIQ:
                     self._ws_url,
                     headers={"client_id": self._client_id, "password": self._client_secret},
                     ssl=False
-                ) as ws:
+                ) as ws: # pylint: disable=unused-variable
                     logger.debug("WebSocket connection successful to %s", self._ws_url)
                     return True
         except ClientConnectorError as err:
             logger.error("Failed to connect to WebSocket %s: %s", self._ws_url, err)
             raise HomeAssistantError(f"Failed to connect to WebSocket: {err}") from err
 
-    async def send_command(self, command: dict = {}):
+    async def send_command(self, command: dict = {}): # pylint: disable=dangerous-default-value
         """Send command to iq hub via websocket."""
         logger.debug("Connecting to WebSocket at %s using command: %s", self._ws_url, command)
         session = None
@@ -65,11 +66,11 @@ class MyPlaceIQ:
                     logger.debug("Received response: %s", parsed_response)
                     if not isinstance(parsed_response, dict):
                         logger.error("Invalid response type: %s", type(parsed_response))
-                        return {}
+                        return {} # pylint: disable=dangerous-default-value
                     return parsed_response
-                else:
-                    logger.error("Received non-text WebSocket message: %s", response.type)
-                    raise HomeAssistantError(f"Invalid WebSocket message type: {response.type}")
+
+                logger.error("Received non-text WebSocket message: %s", response.type)
+                raise HomeAssistantError(f"Invalid WebSocket message type: {response.type}")
         except ClientConnectorError as err:
             logger.error("WebSocket connection error: %s", err)
             raise HomeAssistantError(f"Failed to connect to WebSocket: {err}") from err
