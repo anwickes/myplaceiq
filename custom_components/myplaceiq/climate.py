@@ -64,6 +64,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         logger.warning("No climate entities created; check data structure")
 
 class MyPlaceIQClimate(ClimateEntity):
+    # pylint: disable=too-many-instance-attributes
+    # pylint: disable=too-many-arguments, too-many-positional-arguments
     """Representation of a MyPlaceIQ climate entity for zones or system."""
 
     _attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
@@ -72,7 +74,7 @@ class MyPlaceIQClimate(ClimateEntity):
     _attr_max_temp = 30  # Adjust based on MyPlaceIQ specs
     _attr_target_temperature_step = 1.0  # Enforce whole-number increments
 
-    def __init__(self, coordinator, myplaceiq, config_entry, entity_id, entity_data, is_zone, aircon_id=None):
+    def __init__(self, coordinator, myplaceiq, config_entry, entity_id, entity_data, is_zone, aircon_id=None): # pylint: disable=line-too-long
         """Initialize the climate entity."""
         super().__init__()
         self.coordinator = coordinator
@@ -82,7 +84,7 @@ class MyPlaceIQClimate(ClimateEntity):
         self._is_zone = is_zone
         self._aircon_id = aircon_id if is_zone else entity_id
         self._name = entity_data.get("name", "Zone" if is_zone else "Aircon")
-        self._attr_unique_id = f"{config_entry.entry_id}_{'zone' if is_zone else 'aircon'}_{entity_id}_climate"
+        self._attr_unique_id = f"{config_entry.entry_id}_{'zone' if is_zone else 'aircon'}_{entity_id}_climate" # pylint: disable=line-too-long
         self._attr_name = f"{self._name}_climate".replace(" ", "_").lower()
         self._attr_icon = "mdi:thermostat"
         self._attr_hvac_modes = (
@@ -94,13 +96,14 @@ class MyPlaceIQClimate(ClimateEntity):
     def device_info(self):
         """Return device information."""
         device_info = {
-            "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_{'zone' if self._is_zone else 'aircon'}_{self._entity_id}")},
+            "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_{'zone' if self._is_zone else 'aircon'}_{self._entity_id}")}, # pylint: disable=line-too-long
             "name": f"{'Zone' if self._is_zone else 'Aircon'} {self._name}",
             "manufacturer": "MyPlaceIQ",
             "model": "Zone" if self._is_zone else "Aircon"
         }
         if self._is_zone:
-            device_info["via_device"] = (DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}")
+            device_info["via_device"] = (
+                DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}")
         return device_info
 
     @property
@@ -130,12 +133,13 @@ class MyPlaceIQClimate(ClimateEntity):
             return None
         try:
             body = json.loads(data["body"])
-            aircon = body.get("aircons", {}).get(self._aircon_id if self._is_zone else self._entity_id, {})
+            aircon = body.get("aircons", {}).get(
+                self._aircon_id if self._is_zone else self._entity_id, {})
             mode = aircon.get("mode", "heat")  # Default to heat if mode is unset
             target = body.get("zones" if self._is_zone else "aircons", {}).get(self._entity_id, {})
             if mode == "heat":
                 return target.get("targetTemperatureHeat")
-            elif mode == "cool":
+            if mode == "cool":
                 return target.get("targetTemperatureCool")
             return None
         except (json.JSONDecodeError, TypeError) as err:
@@ -150,7 +154,8 @@ class MyPlaceIQClimate(ClimateEntity):
             return HVACMode.OFF
         try:
             body = json.loads(data["body"])
-            aircon = body.get("aircons", {}).get(self._aircon_id if self._is_zone else self._entity_id, {})
+            aircon = body.get("aircons", {}).get(
+                self._aircon_id if self._is_zone else self._entity_id, {})
             if self._is_zone:
                 zone = body.get("zones", {}).get(self._entity_id, {})
                 return HVACMode.OFF if not zone.get("isOn", False) else HVACMode.AUTO
@@ -177,7 +182,8 @@ class MyPlaceIQClimate(ClimateEntity):
         if not isinstance(data, dict) or not data or "body" not in data:
             return
         body = json.loads(data["body"])
-        aircon = body.get("aircons", {}).get(self._aircon_id if self._is_zone else self._entity_id, {})
+        aircon = body.get("aircons", {}).get(
+            self._aircon_id if self._is_zone else self._entity_id, {})
         mode = aircon.get("mode", "heat")  # Default to heat if mode is unset
 
         command = {
@@ -218,7 +224,9 @@ class MyPlaceIQClimate(ClimateEntity):
         if self._is_zone:
             # Zones only support AUTO (on, inherit aircon mode) or OFF
             if hvac_mode not in [HVACMode.AUTO, HVACMode.OFF]:
-                logger.warning("Zone %s cannot set mode %s; only AUTO or OFF supported", self._entity_id, hvac_mode)
+                logger.warning(
+                    "Zone %s cannot set mode %s; only AUTO or OFF supported",
+                    self._entity_id, hvac_mode)
                 return
             new_state = hvac_mode == HVACMode.AUTO
             command = {

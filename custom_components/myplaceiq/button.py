@@ -133,8 +133,7 @@ class MyPlaceIQButton(ButtonEntity):
         self._is_zone = is_zone
         self._aircon_id = aircon_id if is_zone else entity_id
         self._name = entity_data.get("name", f"{'Zone' if is_zone else 'Aircon'}")
-        self._attr_unique_id = 
-            f"{config_entry.entry_id}_{'zone' if is_zone else 'aircon'}_{entity_id}_{action}"
+        self._attr_unique_id = f"{config_entry.entry_id}_{'zone' if is_zone else 'aircon'}_{entity_id}_{action}" # pylint: disable=line-too-long
         self._attr_name = f"{self._name}_{action}".replace(" ", "_").lower()
         self._attr_icon = (
             "mdi:toggle-switch" if is_zone or action == "toggle" else
