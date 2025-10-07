@@ -12,6 +12,5 @@
   "version": "0.0.1",
   "brand": {
     "logo": "images/logo.png"
-  },
-  "homeassistant": "2024.6.0"
+  }
 }
