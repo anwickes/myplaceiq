@@ -91,4 +91,4 @@ DISCLAIMER: There are probably many ways to do this, all differing from platform
 ## Acknowledgments
 Developed by @anwickes for the Home Assistant community.
 
-See Sponsorships section below if you would like to support this integration by buying me a coffee.
+See Sponsorship section if you would like to support this integration by buying me a coffee.
