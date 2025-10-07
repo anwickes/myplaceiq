@@ -1,13 +1,21 @@
 import logging
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
-from .const import DOMAIN, CONF_HOST, CONF_PORT, CONF_CLIENT_ID, CONF_CLIENT_SECRET, CONF_POLL_INTERVAL
+from .const import (
+    DOMAIN,
+    CONF_HOST,
+    CONF_PORT,
+    CONF_CLIENT_ID,
+    CONF_CLIENT_SECRET,
+    CONF_POLL_INTERVAL
+)
 from .coordinator import MyPlaceIQDataUpdateCoordinator
 from .myplaceiq import MyPlaceIQ
 
 logger = logging.getLogger(__name__)
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    # pylint: disable=unused-argument
     """Set up the MyPlaceIQ integration."""
     hass.data.setdefault(DOMAIN, {})
     return True
@@ -29,12 +37,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             update_interval=entry.options.get(CONF_POLL_INTERVAL, 60)
         )
         await coordinator.async_config_entry_first_refresh()
-        
+
         hass.data[DOMAIN][entry.entry_id] = {
             "coordinator": coordinator,
             "myplaceiq": myplaceiq
         }
-        
+
         await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "button", "climate"])
         return True
     except Exception as err:
