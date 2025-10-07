@@ -1,9 +1,9 @@
 import logging
+import json
 from datetime import timedelta
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from .const import DOMAIN
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,9 @@ class MyPlaceIQDataUpdateCoordinator(DataUpdateCoordinator):
         """Initialize the coordinator."""
         self.myplaceiq = myplaceiq
         self.hass = hass
-        logger.debug("Initializing MyPlaceIQDataUpdateCoordinator with update_interval: %s seconds", update_interval)
+        logger.debug(
+            "Initializing MyPlaceIQDataUpdateCoordinator with update_interval: %s seconds",
+                update_interval)
         super().__init__(
             hass,
             logger,
@@ -26,7 +28,8 @@ class MyPlaceIQDataUpdateCoordinator(DataUpdateCoordinator):
         """Fetch data from MyPlaceIQ."""
         try:
             logger.debug("Fetching data from MyPlaceIQ")
-            response = await self.myplaceiq.send_command({"commands": [{"__type": "GetFullDataEvent"}]})
+            response = await self.myplaceiq.send_command(
+                {"commands": [{"__type": "GetFullDataEvent"}]})
             if not isinstance(response, dict) or "body" not in response:
                 logger.error("Invalid response from MyPlaceIQ: %s", response)
                 raise ValueError("Invalid response from MyPlaceIQ")

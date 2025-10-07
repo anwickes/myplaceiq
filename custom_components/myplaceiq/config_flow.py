@@ -1,17 +1,26 @@
+import logging
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
-import logging
-from .const import DOMAIN, CONF_HOST, CONF_PORT, CONF_CLIENT_ID, CONF_CLIENT_SECRET, CONF_POLL_INTERVAL
+from .const import (
+    DOMAIN,
+    CONF_HOST,
+    CONF_PORT,
+    CONF_CLIENT_ID,
+    CONF_CLIENT_SECRET,
+    CONF_POLL_INTERVAL
+)
 
 logger = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = vol.Schema({
-    vol.Required(CONF_HOST, default="192.168.1.171"): str,
-    vol.Required(CONF_PORT, default=8086): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
+    vol.Required(CONF_HOST, default="x.x.x.x"): str,
+    vol.Required(CONF_PORT, default=8086):
+        vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
     vol.Required(CONF_CLIENT_ID): str,
     vol.Required(CONF_CLIENT_SECRET): str,
-    vol.Optional(CONF_POLL_INTERVAL, default=60): vol.All(vol.Coerce(int), vol.Range(min=10, max=300)),
+    vol.Optional(CONF_POLL_INTERVAL, default=60):
+        vol.All(vol.Coerce(int), vol.Range(min=10, max=300)),
 })
 
 class MyPlaceIQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -32,7 +41,8 @@ class MyPlaceIQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 client_secret = user_input[CONF_CLIENT_SECRET]
                 poll_interval = user_input.get(CONF_POLL_INTERVAL, 60)
 
-                # Test connection (optional, can be implemented if MyPlaceIQ supports a test endpoint)
+                # Test connection (optional, can be implemented
+                #   if MyPlaceIQ supports a test endpoint)
                 await self.async_set_unique_id(f"{DOMAIN}_{client_id}")
                 self._abort_if_unique_id_configured()
 
@@ -48,7 +58,7 @@ class MyPlaceIQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_POLL_INTERVAL: poll_interval,
                     },
                 )
-            except Exception as err:
+            except Exception as err: # pylint: disable=broad-except
                 logger.error("Error during config flow: %s", err)
                 errors["base"] = "unknown"
 
@@ -87,7 +97,8 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
                 port = user_input[CONF_PORT]
                 client_id = user_input[CONF_CLIENT_ID]
                 client_secret = user_input[CONF_CLIENT_SECRET]
-                poll_interval = user_input.get(CONF_POLL_INTERVAL, self.config_entry.options.get(CONF_POLL_INTERVAL, 60))
+                poll_interval = user_input.get(
+                    CONF_POLL_INTERVAL, self.config_entry.options.get(CONF_POLL_INTERVAL, 60))
 
                 # Validate inputs
                 if not isinstance(poll_interval, int) or poll_interval < 10 or poll_interval > 300:
@@ -98,8 +109,9 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
                     # Update unique_id if client_id changed
                     new_unique_id = f"{DOMAIN}_{client_id}"
                     if new_unique_id != self.config_entry.unique_id:
-                        await self.hass.config_entries.async_set_unique_id(self.config_entry.entry_id, new_unique_id)
-                    
+                        await self.hass.config_entries.async_set_unique_id(
+                            self.config_entry.entry_id, new_unique_id)
+
                     # Update entry.data and entry.options
                     self.hass.config_entries.async_update_entry(
                         self.config_entry,
@@ -114,12 +126,12 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
                         },
                     )
                     return self.async_create_entry(title="", data={})
-            except Exception as err:
+            except Exception as err: # pylint: disable=broad-except
                 logger.error("Error during options flow: %s", err)
                 errors["base"] = "unknown"
 
         # Initialize defaults from current config entry
-        current_host = self.config_entry.data.get(CONF_HOST, "192.168.1.100")
+        current_host = self.config_entry.data.get(CONF_HOST, "x.x.x.x")
         current_port = self.config_entry.data.get(CONF_PORT, 8086)
         current_client_id = self.config_entry.data.get(CONF_CLIENT_ID, "")
         current_client_secret = self.config_entry.data.get(CONF_CLIENT_SECRET, "")
@@ -129,10 +141,12 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
             step_id="init",
             data_schema=vol.Schema({
                 vol.Required(CONF_HOST, default=current_host): str,
-                vol.Required(CONF_PORT, default=current_port): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
+                vol.Required(CONF_PORT, default=current_port):
+                    vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
                 vol.Required(CONF_CLIENT_ID, default=current_client_id): str,
                 vol.Required(CONF_CLIENT_SECRET, default=current_client_secret): str,
-                vol.Optional(CONF_POLL_INTERVAL, default=current_poll_interval): vol.All(vol.Coerce(int), vol.Range(min=10, max=300)),
+                vol.Optional(CONF_POLL_INTERVAL, default=current_poll_interval):
+                    vol.All(vol.Coerce(int), vol.Range(min=10, max=300)),
             }),
             errors=errors,
         )

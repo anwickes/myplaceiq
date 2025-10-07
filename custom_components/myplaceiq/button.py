@@ -3,12 +3,13 @@ import logging
 from homeassistant.components.button import ButtonEntity
 from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.core import HomeAssistant
+
 from .const import DOMAIN
 
 logger = logging.getLogger(__name__)
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
+    # pylint: disable=duplicate-code
     """Set up MyPlaceIQ button entities from a config entry."""
     logger.debug("Setting up button entities for MyPlaceIQ")
     coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
@@ -29,6 +30,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     zones = body.get("zones", {})
 
     entities = []
+    # pylint: enable=duplicate-code
 
     # AC System Buttons (Toggle and Modes)
     for aircon_id, aircon_data in aircons.items():
@@ -94,7 +96,9 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     for aircon_id, aircon_data in aircons.items():
         for zone_id in aircon_data.get("zoneOrder", []):
             zone_data = zones.get(zone_id)
-            if zone_data and zone_data.get("isVisible", False) and zone_data.get("isClickable", False):
+            if (zone_data and
+                zone_data.get("isVisible", False) and
+                zone_data.get("isClickable", False)):
                 entities.append(
                     MyPlaceIQButton(
                         coordinator=coordinator,
@@ -117,9 +121,11 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         logger.warning("No button entities created; check data structure")
 
 class MyPlaceIQButton(ButtonEntity):
+    # pylint: disable=too-many-instance-attributes
+    # pylint: disable=too-many-arguments, too-many-positional-arguments
     """Button for MyPlaceIQ AC or zone control."""
 
-    def __init__(self, coordinator, config_entry, myplaceiq, entity_id, entity_data, action, command_type, command_params, is_zone, aircon_id=None):
+    def __init__(self, coordinator, config_entry, myplaceiq, entity_id, entity_data, action, command_type, command_params, is_zone, aircon_id=None): # pylint: disable=line-too-long
         super().__init__()
         self.coordinator = coordinator
         self._myplaceiq = myplaceiq
@@ -131,7 +137,7 @@ class MyPlaceIQButton(ButtonEntity):
         self._is_zone = is_zone
         self._aircon_id = aircon_id if is_zone else entity_id
         self._name = entity_data.get("name", f"{'Zone' if is_zone else 'Aircon'}")
-        self._attr_unique_id = f"{config_entry.entry_id}_{'zone' if is_zone else 'aircon'}_{entity_id}_{action}"
+        self._attr_unique_id = f"{config_entry.entry_id}_{'zone' if is_zone else 'aircon'}_{entity_id}_{action}" # pylint: disable=line-too-long
         self._attr_name = f"{self._name}_{action}".replace(" ", "_").lower()
         self._attr_icon = (
             "mdi:toggle-switch" if is_zone or action == "toggle" else
@@ -153,9 +159,13 @@ class MyPlaceIQButton(ButtonEntity):
                     "homeassistant", "update_entity", {"entity_id": state_sensor_id}
                 )
             )
-            logger.debug("Optimistically updated %s %s %s to %s", entity_type[:-1], self._entity_id, attribute, new_value)
+            logger.debug(
+                "Optimistically updated %s %s %s to %s", entity_type[:-1],
+                    self._entity_id, attribute, new_value)
         else:
-            logger.warning("Could not perform optimistic update for %s %s %s: not found in data", entity_type[:-1], self._entity_id, attribute)
+            logger.warning(
+                "Could not perform optimistic update for %s %s %s: not found in data",
+                    entity_type[:-1], self._entity_id, attribute)
 
     async def async_press(self):
         """Handle button press for AC or zone commands."""
@@ -182,7 +192,8 @@ class MyPlaceIQButton(ButtonEntity):
                 }
                 # Perform optimistic update
                 self._perform_optimistic_update(body, "isOn", new_state)
-                logger.debug("Sent toggle command for aircon %s to isOn=%s", self._entity_id, new_state)
+                logger.debug("Sent toggle command for aircon %s to isOn=%s",
+                            self._entity_id, new_state)
             elif self._command_type == "SetZoneOpenClose" and self._action == "toggle":
                 # Zone toggle: dynamically determine isOpen
                 zone = body.get("zones", {}).get(self._entity_id, {})
@@ -199,7 +210,8 @@ class MyPlaceIQButton(ButtonEntity):
                 }
                 # Perform optimistic update
                 self._perform_optimistic_update(body, "isOn", new_state)
-                logger.debug("Sent toggle command for zone %s to isOpen=%s", self._entity_id, new_state)
+                logger.debug("Sent toggle command for zone %s to isOpen=%s",
+                            self._entity_id, new_state)
             else:
                 # Mode commands: use predefined command_params
                 command = {
@@ -214,25 +226,27 @@ class MyPlaceIQButton(ButtonEntity):
                 # Optimistic update for mode changes
                 if self._command_type == "SetAirconMode":
                     self._perform_optimistic_update(body, "mode", self._command_params["mode"])
-                logger.debug("Sent %s command for aircon %s: %s", self._action, self._entity_id, self._command_params)
+                logger.debug("Sent %s command for aircon %s: %s",
+                            self._action, self._entity_id, self._command_params)
 
             await self._myplaceiq.send_command(command)
             # Schedule a full coordinator refresh to sync with device
             self.hass.async_create_task(self.coordinator.async_request_refresh())
         except (json.JSONDecodeError, TypeError, HomeAssistantError) as err:
-            logger.error("Failed to send %s command for %s %s: %s", 
-                         self._action, "zone" if self._is_zone else "aircon", self._entity_id, err)
+            logger.error("Failed to send %s command for %s %s: %s",
+                        self._action, "zone" if self._is_zone else "aircon", self._entity_id, err)
             raise
 
     @property
     def device_info(self):
         """Return device information."""
         device_info = {
-            "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_{'zone' if self._is_zone else 'aircon'}_{self._entity_id}")},
+            "identifiers": 
+                {(DOMAIN, f"{self._config_entry.entry_id}_{'zone' if self._is_zone else 'aircon'}_{self._entity_id}")}, # pylint: disable=line-too-long
             "name": f"{'Zone' if self._is_zone else 'Aircon'} {self._name}",
             "manufacturer": "MyPlaceIQ",
             "model": "Zone" if self._is_zone else "Aircon"
         }
         if self._is_zone:
-            device_info["via_device"] = (DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}")
+            device_info["via_device"] = (DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}") # pylint: disable=line-too-long
         return device_info

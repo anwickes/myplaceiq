@@ -3,7 +3,6 @@
   "name": "MyPlaceIQ",
   "codeowners": ["@anwickes"],
   "config_flow": true,
-  "dependencies": ["climate"],
   "documentation": "https://github.com/anwickes/myplaceiq#myplaceiq",
   "integration_type": "hub",
   "iot_class": "local_polling",
@@ -11,6 +10,6 @@
   "requirements": ["aiohttp>=3.8.1"],
   "version": "0.0.1",
   "brand": {
-    "logo": "images/logo.png"
+    "logo": "custom_components/myplaceiq/images/logo.png"
   }
 }
