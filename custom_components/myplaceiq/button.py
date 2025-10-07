@@ -3,7 +3,7 @@ import logging
 from homeassistant.components.button import ButtonEntity
 from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.core import HomeAssistant
+
 from .const import DOMAIN
 
 logger = logging.getLogger(__name__)
@@ -118,6 +118,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
 class MyPlaceIQButton(ButtonEntity):
     """Button for MyPlaceIQ AC or zone control."""
+    # pylint: disable=too-many-arguments, too-many-positional-args
 
     def __init__(self, coordinator, config_entry, myplaceiq, entity_id, entity_data, action, command_type, command_params, is_zone, aircon_id=None):
         super().__init__()

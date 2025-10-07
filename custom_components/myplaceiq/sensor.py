@@ -30,8 +30,18 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     # AC System Sensors (Mode and State)
     for aircon_id, aircon_data in aircons.items():
         entities.extend([
-            MyPlaceIQAirconSensor(coordinator, config_entry, aircon_id, aircon_data),
-            MyPlaceIQAirconStateSensor(coordinator, config_entry, aircon_id, aircon_data)
+            MyPlaceIQAirconSensor(
+                coordinator,
+                config_entry,
+                aircon_id,
+                aircon_data
+            ),
+            MyPlaceIQAirconStateSensor(
+                coordinator,
+                config_entry,
+                aircon_id,
+                aircon_data
+            )
         ])
 
     # Zone Sensors (Temperature and State)
@@ -40,8 +50,20 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             zone_data = zones.get(zone_id)
             if zone_data and zone_data.get("isVisible", False):
                 entities.extend([
-                    MyPlaceIQZoneSensor(coordinator, config_entry, zone_id, zone_data, aircon_id),
-                    MyPlaceIQZoneStateSensor(coordinator, config_entry, zone_id, zone_data, aircon_id)
+                    MyPlaceIQZoneSensor(
+                        coordinator,
+                        config_entry,
+                        zone_id,
+                        zone_data,
+                        aircon_id
+                    ),
+                    MyPlaceIQZoneStateSensor(
+                        coordinator,
+                        config_entry,
+                        zone_id,
+                        zone_data,
+                        aircon_id
+                    )
                 ])
 
     if entities:
@@ -51,6 +73,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         logger.warning("No sensor entities created; check data structure")
 
 class MyPlaceIQAirconSensor(SensorEntity):
+    # pylint: disable=too-many-instance-attributes
     """Sensor for MyPlaceIQ AC system mode."""
 
     def __init__(self, coordinator, config_entry, aircon_id, aircon_data):
@@ -114,6 +137,7 @@ class MyPlaceIQAirconSensor(SensorEntity):
         }
 
 class MyPlaceIQAirconStateSensor(SensorEntity):
+    # pylint: disable=too-many-instance-attributes
     """Sensor for MyPlaceIQ AC system on/off state."""
 
     def __init__(self, coordinator, config_entry, aircon_id, aircon_data):
@@ -154,6 +178,7 @@ class MyPlaceIQAirconStateSensor(SensorEntity):
         }
 
 class MyPlaceIQZoneSensor(SensorEntity):
+    # pylint: disable=too-many-instance-attributes
     """Sensor for MyPlaceIQ zone temperature."""
 
     def __init__(self, coordinator, config_entry, zone_id, zone_data, aircon_id):
@@ -219,6 +244,7 @@ class MyPlaceIQZoneSensor(SensorEntity):
         }
 
 class MyPlaceIQZoneStateSensor(SensorEntity):
+    # pylint: disable=too-many-instance-attributes
     """Sensor for MyPlaceIQ zone on/off state."""
 
     def __init__(self, coordinator, config_entry, zone_id, zone_data, aircon_id):
