@@ -179,7 +179,7 @@ class MyPlaceIQAirconStateSensor(SensorEntity):
 
 class MyPlaceIQZoneSensor(SensorEntity):
     # pylint: disable=too-many-instance-attributes
-    # pylint: disable=too-many-arguments, too-many-positional-args
+    # pylint: disable=too-many-arguments, too-many-positional-arguments
     """Sensor for MyPlaceIQ zone temperature."""
 
     def __init__(self, coordinator, config_entry, zone_id, zone_data, aircon_id):
@@ -246,7 +246,7 @@ class MyPlaceIQZoneSensor(SensorEntity):
 
 class MyPlaceIQZoneStateSensor(SensorEntity):
     # pylint: disable=too-many-instance-attributes
-    # pylint: disable=too-many-arguments, too-many-positional-args
+    # pylint: disable=too-many-arguments, too-many-positional-arguments
     """Sensor for MyPlaceIQ zone on/off state."""
 
     def __init__(self, coordinator, config_entry, zone_id, zone_data, aircon_id):
