@@ -11,7 +11,7 @@ disable=
 
 [SIMILARITIES]
 
-min-similarity-lines=4
+min-similarity-lines=10
 ignore-comments=yes
 ignore-docstrings=yes
 ignore-imports=yes
