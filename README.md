@@ -78,7 +78,15 @@ DISCLAIMER: There are probably many ways to do this, all differing from platform
 - **License**: MIT.
 
 ## Screenshots
-TBA
+
+<img width="826" height="670" alt="image" src="https://github.com/user-attachments/assets/71fb43f2-73e5-41f8-81e1-755427b42681" />
+<img width="273" height="651" alt="image" src="https://github.com/user-attachments/assets/81cc9098-bda0-4972-9051-c9303d306bc7" />
+<img width="266" height="495" alt="image" src="https://github.com/user-attachments/assets/687f14ea-9135-4d6a-b2db-77130b634964" />
+<img width="1104" height="462" alt="image" src="https://github.com/user-attachments/assets/d2d556ca-ddbb-491f-8910-f85f812bd9a9" />
+
+
+
+
 
 ## Acknowledgments
 Developed by @anwickes for the Home Assistant community.
