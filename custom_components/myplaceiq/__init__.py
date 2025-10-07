@@ -44,10 +44,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         }
 
         await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "button", "climate"])
-        
+
         # Add listener for options updates
         entry.add_update_listener(async_reload_entry)
-        
+
         return True
     except Exception as err:
         logger.error("Failed to set up MyPlaceIQ integration: %s", err)
@@ -56,7 +56,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     logger.debug("Unloading MyPlaceIQ entry: %s", entry.entry_id)
-    unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "button", "climate"])
+    unload_ok = await hass.config_entries.async_unload_platforms(
+        entry, ["sensor", "button", "climate"])
     if unload_ok:
         await hass.data[DOMAIN][entry.entry_id]["myplaceiq"].close()
         hass.data[DOMAIN].pop(entry.entry_id)
