@@ -159,15 +159,15 @@ class MyPlaceIQClimate(ClimateEntity):
             if self._is_zone:
                 zone = body.get("zones", {}).get(self._entity_id, {})
                 return HVACMode.OFF if not zone.get("isOn", False) else HVACMode.AUTO
-            else:
-                return (
-                    HVACMode.OFF if not aircon.get("isOn", False) else
-                    HVACMode.HEAT if aircon.get("mode") == "heat" else
-                    HVACMode.COOL if aircon.get("mode") == "cool" else
-                    HVACMode.DRY if aircon.get("mode") == "dry" else
-                    HVACMode.FAN_ONLY if aircon.get("mode") == "fan" else
-                    HVACMode.OFF
-                )
+
+            return (
+                HVACMode.OFF if not aircon.get("isOn", False) else
+                HVACMode.HEAT if aircon.get("mode") == "heat" else
+                HVACMode.COOL if aircon.get("mode") == "cool" else
+                HVACMode.DRY if aircon.get("mode") == "dry" else
+                HVACMode.FAN_ONLY if aircon.get("mode") == "fan" else
+                HVACMode.OFF
+            )
         except (json.JSONDecodeError, TypeError) as err:
             logger.error("Failed to parse HVAC mode: %s", err)
             return HVACMode.OFF
