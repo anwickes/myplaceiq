@@ -1,86 +1,73 @@
 import json
-import random
-import string
 import logging
-import socket
+import uuid
 import aiohttp
-from aiohttp.client_exceptions import ClientConnectorError
-from homeassistant.exceptions import HomeAssistantError
+from typing import Any, Dict, Optional
+from homeassistant.core import HomeAssistant
 
 logger = logging.getLogger(__name__)
 
 class MyPlaceIQ:
-    # pylint: disable=too-many-arguments, too-many-positional-arguments
-    """Class to handle WebSocket communication with MyPlaceIQ hub using aiohttp."""
+    """Class to communicate with MyPlaceIQ API."""
 
-    def __init__(self, hass, host: str, port: str, client_id: str, client_secret: str):
-        self._hass = hass
-        self._host = host
-        self._port = port
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        host: str,
+        port: int,
+        client_id: str,
+        client_secret: str,
+    ) -> None:
+        """Initialize MyPlaceIQ API client."""
+        self.hass = hass
+        self._url = f"ws://{host}:{port}/ws"
         self._client_id = client_id
         self._client_secret = client_secret
-        self._ws_url = f"ws://{host}:{port}/ws"
-        logger.debug("Initialized MyPlaceIQ with URL: %s", self._ws_url)
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
+        logger.debug("Initialized MyPlaceIQ with URL: %s", self._url)
 
-    async def validate_connection(self):
-        """Validate connection to the MyPlaceIQ hub."""
-        logger.debug("Validating connection to %s", self._ws_url)
+    async def send_command(self, command: Dict[str, Any]) -> Dict[str, Any]:
+        """Send a command to MyPlaceIQ and return the response."""
+        if self._session is None:
+            self._session = aiohttp.ClientSession()
         try:
-            socket.getaddrinfo(self._host, self._port)
-        except socket.gaierror as err:
-            logger.error("DNS resolution failed for %s: %s", self._host, err)
-            raise HomeAssistantError(f"DNS resolution failed for {self._host}: {err}") from err
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.ws_connect(
-                    self._ws_url,
-                    headers={"client_id": self._client_id, "password": self._client_secret},
-                    ssl=False
-                ) as ws: # pylint: disable=unused-variable
-                    logger.debug("WebSocket connection successful to %s", self._ws_url)
-                    return True
-        except ClientConnectorError as err:
-            logger.error("Failed to connect to WebSocket %s: %s", self._ws_url, err)
-            raise HomeAssistantError(f"Failed to connect to WebSocket: {err}") from err
-
-    async def send_command(self, command: dict = {}): # pylint: disable=dangerous-default-value
-        """Send command to iq hub via websocket."""
-        logger.debug("Connecting to WebSocket at %s using command: %s", self._ws_url, command)
-        session = None
-        try:
-            session = aiohttp.ClientSession()
-            async with session.ws_connect(
-                self._ws_url,
+            logger.debug(
+                "Connecting to WebSocket at %s using command: %s",
+                self._url,
+                command
+            )
+            async with self._session.ws_connect(
+                self._url,
                 headers={"client_id": self._client_id, "password": self._client_secret},
-                ssl=False
             ) as ws:
+                self._ws = ws
                 message = {
-                    "uuid": "".join(random.choices(string.ascii_letters + string.digits, k=20)),
+                    "uuid": str(uuid.uuid1()),
                     "body": json.dumps(command)
                 }
                 logger.debug("Sending command message: %s", message)
-                await ws.send_str(json.dumps(message))
-                response = await ws.receive()
-                if response.type == aiohttp.WSMsgType.TEXT:
-                    parsed_response = json.loads(response.data)
-                    logger.debug("Received response: %s", parsed_response)
-                    if not isinstance(parsed_response, dict):
-                        logger.error("Invalid response type: %s", type(parsed_response))
-                        return {} # pylint: disable=dangerous-default-value
-                    return parsed_response
-
-                logger.error("Received non-text WebSocket message: %s", response.type)
-                raise HomeAssistantError(f"Invalid WebSocket message type: {response.type}")
-        except ClientConnectorError as err:
-            logger.error("WebSocket connection error: %s", err)
-            raise HomeAssistantError(f"Failed to connect to WebSocket: {err}") from err
-        except json.JSONDecodeError as err:
-            logger.error("Failed to parse WebSocket response: %s", err)
-            raise HomeAssistantError(f"Invalid response: {err}") from err
+                await ws.send_json(message)
+                response = await ws.receive_json()
+                logger.debug("Received response: %s", response)
+                return response
         except Exception as err:
-            logger.error("Unexpected error in send_command: %s", err)
-            raise HomeAssistantError(f"Error fetching data: {err}") from err
+            logger.error("Error sending command: %s", err)
+            raise
         finally:
-            if session is not None:
-                await session.close()
+            await self.close()
+
+    async def close(self) -> None:
+        """Close the WebSocket connection and session."""
+        try:
+            if self._ws and not self._ws.closed:
+                await self._ws.close()
                 logger.debug("WebSocket session closed")
+            if self._session and not self._session.closed:
+                await self._session.close()
+                logger.debug("Client session closed")
+        except Exception as err:
+            logger.error("Error closing WebSocket or session: %s", err)
+        finally:
+            self._ws = None
+            self._session = None
