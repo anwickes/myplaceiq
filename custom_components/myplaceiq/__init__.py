@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from .const import (
@@ -37,7 +38,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             myplaceiq,
             update_interval=entry.options.get(CONF_POLL_INTERVAL, 60)
         )
-        await coordinator.async_refresh()  # Replaced async_config_entry_first_refresh
+        await coordinator.async_refresh()  # Use the recommended method
         if not coordinator.last_update_success:
             raise ValueError("Initial data fetch failed")
 
@@ -47,7 +48,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         }
 
         await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "button", "climate"])
-        entry.add_update_listener(async_reload_entry)
+        entry.async_on_unload(entry.add_update_listener(async_reload_entry))
         logger.debug("Added update listener for entry: %s", entry.entry_id)
         return True
     except Exception as err:
@@ -58,10 +59,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     logger.debug("Unloading MyPlaceIQ entry: %s", entry.entry_id)
     try:
+        if entry.entry_id not in hass.data.get(DOMAIN, {}):
+            logger.warning("Config entry %s not found in hass.data", entry.entry_id)
+            return False
         unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "button", "climate"])
-        if unload_ok and entry.entry_id in hass.data[DOMAIN]:
+        if unload_ok:
             await hass.data[DOMAIN][entry.entry_id]["myplaceiq"].close()
-            hass.data[DOMAIN].pop(entry.entry_id)
+            hass.data[DOMAIN].pop(entry.entry_id, None)
+            logger.debug("Successfully unloaded entry: %s", entry.entry_id)
+        else:
+            logger.error("Failed to unload platforms for entry: %s", entry.entry_id)
         return unload_ok
     except Exception as err:
         logger.error("Error unloading MyPlaceIQ entry: %s", err)
@@ -70,5 +77,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload the config entry when options are updated."""
     logger.debug("Reloading MyPlaceIQ entry: %s with new options: %s", entry.entry_id, entry.options)
-    await async_unload_entry(hass, entry)
+    if entry.entry_id in hass.data.get(DOMAIN, {}):
+        await async_unload_entry(hass, entry)
     await async_setup_entry(hass, entry)
