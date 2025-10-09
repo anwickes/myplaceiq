@@ -1,15 +1,15 @@
 import json
 import logging
 import uuid
-import aiohttp
 from typing import Any, Dict, Optional
+import aiohttp
 from homeassistant.core import HomeAssistant
 
 logger = logging.getLogger(__name__)
 
 class MyPlaceIQ:
     """Class to communicate with MyPlaceIQ API."""
-
+    # pylint: disable=too-many-arguments, too-many-positional-arguments
     def __init__(
         self,
         hass: HomeAssistant,
@@ -66,7 +66,7 @@ class MyPlaceIQ:
             if self._session and not self._session.closed:
                 await self._session.close()
                 logger.debug("Client session closed")
-        except Exception as err:
+        except Exception as err: # pylint: disable=broad-except
             logger.error("Error closing WebSocket or session: %s", err)
         finally:
             self._ws = None

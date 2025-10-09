@@ -1,6 +1,6 @@
 import logging
-import voluptuous as vol
 from datetime import timedelta
+import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from .const import (
@@ -81,7 +81,7 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
         """Initialize options flow with config_entry."""
         logger.debug("Initialized MyPlaceIQOptionsFlow for config entry: %s", config_entry.entry_id)
 
-    async def async_step_init(self, user_input=None):
+    async def async_step_init(self, user_input=None): # pylint: disable=too-many-locals
         """Manage the options."""
         errors = {}
         config_entry = self.hass.config_entries.async_get_entry(self._config_entry_id)
@@ -92,7 +92,8 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
                 port = user_input[CONF_PORT]
                 client_id = user_input[CONF_CLIENT_ID]
                 client_secret = user_input[CONF_CLIENT_SECRET]
-                poll_interval = user_input.get(CONF_POLL_INTERVAL, config_entry.options.get(CONF_POLL_INTERVAL, 60))
+                poll_interval = user_input.get(CONF_POLL_INTERVAL, 
+                    config_entry.options.get(CONF_POLL_INTERVAL, 60))
 
                 # Validate inputs
                 if not isinstance(poll_interval, int) or poll_interval < 10 or poll_interval > 300:
@@ -126,7 +127,8 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
                         coordinator = self.hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
                         coordinator.update_interval = timedelta(seconds=poll_interval)
                         await coordinator.async_refresh()
-                        logger.debug("Updated coordinator update_interval to %s seconds", poll_interval)
+                        logger.debug("Updated coordinator update_interval to %s seconds", 
+                            poll_interval)
 
                     # Clear the skip_reload flag
                     self.hass.config_entries.async_update_entry(
@@ -139,7 +141,7 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
 
                     logger.debug("Config entry updated successfully: %s", config_entry.options)
                     return self.async_create_entry(title="", data=None)
-            except Exception as err:
+            except Exception as err: # pylint: disable=broad-except
                 logger.error("Error during options flow: %s", err)
                 errors["base"] = "unknown"
 
