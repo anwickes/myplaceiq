@@ -106,7 +106,7 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
                         await self.hass.config_entries.async_set_unique_id(
                             config_entry.entry_id, new_unique_id)
 
-                    # Update the config entry without triggering a reload
+                    # Update the config entry with a flag to skip reload
                     self.hass.config_entries.async_update_entry(
                         config_entry,
                         data={
@@ -117,16 +117,27 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
                         },
                         options={
                             CONF_POLL_INTERVAL: poll_interval,
+                            "_skip_reload": True,  # Flag to prevent reload
                         },
                     )
+
                     # Manually update the coordinator's update_interval
                     if config_entry.entry_id in self.hass.data.get(DOMAIN, {}):
                         coordinator = self.hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
                         coordinator.update_interval = timedelta(seconds=poll_interval)
-                        await coordinator.async_refresh()  # Trigger a refresh to apply the new interval
+                        await coordinator.async_refresh()
                         logger.debug("Updated coordinator update_interval to %s seconds", poll_interval)
+
+                    # Clear the skip_reload flag
+                    self.hass.config_entries.async_update_entry(
+                        config_entry,
+                        options={
+                            CONF_POLL_INTERVAL: poll_interval,
+                            "_skip_reload": False,
+                        },
+                    )
+
                     logger.debug("Config entry updated successfully: %s", config_entry.options)
-                    # Return without triggering async_create_entry to avoid update listener
                     return self.async_create_entry(title="", data=None)
             except Exception as err:
                 logger.error("Error during options flow: %s", err)
