@@ -26,6 +26,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up MyPlaceIQ from a config entry."""
     logger.debug("Setting up MyPlaceIQ entry: %s with options: %s", entry.entry_id, entry.options)
     try:
+        # Check if the entry is already being set up
+        if entry.entry_id in hass.data.get(DOMAIN, {}):
+            logger.warning("Config entry %s is already being set up, skipping", entry.entry_id)
+            return False
+
         myplaceiq = MyPlaceIQ(
             hass=hass,
             host=entry.data[CONF_HOST],
@@ -61,10 +66,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         if entry.entry_id not in hass.data.get(DOMAIN, {}):
             logger.warning("Config entry %s not found in hass.data", entry.entry_id)
-            return False
+            return True  # Consider it unloaded if it doesn't exist
+
+        # Unload platforms
         unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "button", "climate"])
         if unload_ok:
+            # Close the WebSocket connection
             await hass.data[DOMAIN][entry.entry_id]["myplaceiq"].close()
+            # Remove the entry from hass.data
             hass.data[DOMAIN].pop(entry.entry_id, None)
             logger.debug("Successfully unloaded entry: %s", entry.entry_id)
         else:
@@ -77,6 +86,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload the config entry when options are updated."""
     logger.debug("Reloading MyPlaceIQ entry: %s with new options: %s", entry.entry_id, entry.options)
-    if entry.entry_id in hass.data.get(DOMAIN, {}):
-        await async_unload_entry(hass, entry)
+    # Skip reload if _skip_reload flag is set
+    if entry.options.get("_skip_reload", False):
+        logger.debug("Skipping reload for entry %s due to _skip_reload flag", entry.entry_id)
+        return
+    # Ensure the entry is unloaded before setting it up again
+    await async_unload_entry(hass, entry)
     await async_setup_entry(hass, entry)
