@@ -57,7 +57,7 @@ class MyPlaceIQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_POLL_INTERVAL: poll_interval,
                     },
                 )
-            except Exception as err:
+            except Exception as err: # pylint: disable=broad-except
                 logger.error("Error during config flow: %s", err)
                 errors["base"] = "unknown"
 
@@ -92,7 +92,7 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
                 port = user_input[CONF_PORT]
                 client_id = user_input[CONF_CLIENT_ID]
                 client_secret = user_input[CONF_CLIENT_SECRET]
-                poll_interval = user_input.get(CONF_POLL_INTERVAL, 
+                poll_interval = user_input.get(CONF_POLL_INTERVAL,
                     config_entry.options.get(CONF_POLL_INTERVAL, 60))
 
                 # Validate inputs
@@ -127,7 +127,7 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
                         coordinator = self.hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
                         coordinator.update_interval = timedelta(seconds=poll_interval)
                         await coordinator.async_refresh()
-                        logger.debug("Updated coordinator update_interval to %s seconds", 
+                        logger.debug("Updated coordinator update_interval to %s seconds",
                             poll_interval)
 
                     # Clear the skip_reload flag

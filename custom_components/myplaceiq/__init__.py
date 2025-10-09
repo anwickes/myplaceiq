@@ -52,7 +52,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "myplaceiq": myplaceiq
         }
 
-        await hass.config_entries.async_forward_entry_setups(entry, 
+        await hass.config_entries.async_forward_entry_setups(entry,
             ["sensor", "button", "climate"])
         entry.async_on_unload(entry.add_update_listener(async_reload_entry))
         logger.debug("Added update listener for entry: %s", entry.entry_id)
@@ -70,7 +70,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             return True  # Consider it unloaded if it doesn't exist
 
         # Unload platforms
-        unload_ok = await hass.config_entries.async_unload_platforms(entry, 
+        unload_ok = await hass.config_entries.async_unload_platforms(entry,
             ["sensor", "button", "climate"])
         if unload_ok:
             # Close the WebSocket connection
@@ -87,11 +87,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload the config entry when options are updated."""
-    logger.debug("Reloading MyPlaceIQ entry: %s with new options: %s", 
+    logger.debug("Reloading MyPlaceIQ entry: %s with new options: %s",
         entry.entry_id, entry.options)
     # Skip reload if _skip_reload flag is set
     if entry.options.get("_skip_reload", False):
-        logger.debug("Skipping reload for entry %s due to _skip_reload flag", 
+        logger.debug("Skipping reload for entry %s due to _skip_reload flag",
             entry.entry_id)
         return
     # Ensure the entry is unloaded before setting it up again
