@@ -15,11 +15,11 @@ from .const import (
 logger = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = vol.Schema({
-    vol.Required(CONF_HOST, default="192.168.1.171"): str,
+    vol.Required(CONF_HOST, default="x.x.x.x"): str,
     vol.Required(CONF_PORT, default=8086):
         vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
-    vol.Required(CONF_CLIENT_ID, ***REMOVED***): str,
-    vol.Required(CONF_CLIENT_SECRET, ***REMOVED***): str,
+    vol.Required(CONF_CLIENT_ID): str,
+    vol.Required(CONF_CLIENT_SECRET): str,
     vol.Optional(CONF_POLL_INTERVAL, default=60):
         vol.All(vol.Coerce(int), vol.Range(min=10, max=300)),
 })
