@@ -69,6 +69,9 @@ DISCLAIMER: There are probably many ways to do this, all differing from platform
 - Home Assistant does not support mDNS (multicast DNS) for resolving hostnames. You must use the hub’s static IP address (e.g., `192.168.1.x`) in the configuration.
 - To find the IP address of your MyPlaceIQ hub, check your router’s DHCP client list or use a network scanner. Ensure the hub has a static IP to prevent changes during DHCP lease renewals.
 
+### App Sync
+- In order for the app to sync with Home Assistant, "Hub Remote Access" must be turned on (Found under "Settings/Hub Settings"). If you have this turned off, the myplaceiq app will only reflect what has been changed in Home Assistant when you restart the application. This doesn't impact the way Home Assistant interacts with the myplaceiq hub but it's good to know.
+
 ## Requirements
 - Home Assistant 2023.9 or later.
 
