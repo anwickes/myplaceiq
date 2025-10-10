@@ -4,6 +4,27 @@ All notable changes to the MyPlaceIQ Home Assistant integration will be document
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [1.0.0] - 2025-10-10
+### Added
+- First official release so contains all added functionality that has been mentioned in previous changelog updates.
+
+### Fixed
+- Resolved `AttributeError: 'ConfigEntry' object has no attribute '_update_listener'` in the options flow.
+- Improved coordinator to correctly apply the `poll_interval` setting without resetting to default (60 seconds).
+
+### Changed
+- Updated `async_config_entry_first_refresh` to `async_refresh` to avoid deprecation warnings in Home Assistant 2025.11.
+
+
+## [Unreleased] - 2025-10-04
+### Added
+- Climate entities for zones (e.g., `climate.main_bedroom_climate`) and main system (e.g., `climate.myplaceiq_system`).
+- Support for temperature control (`SetZoneHeatTemperature`, `SetAirconHeatTemperature`, etc.) and HVAC modes (`heat`, `cool`, `dry`, `fan`, `off`).
+- Integration with thermostat cards for temperature and mode control.
+- Optimistic updates for temperature and mode changes.
+
+
 ## [Unreleased] - 2025-10-03
 ### Added
 - Initial support for MyPlaceIQ HVAC hub.
@@ -17,21 +38,3 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 - N/A
-
-## [Unreleased] - 2025-10-04
-### Added
-- Climate entities for zones (e.g., `climate.main_bedroom_climate`) and main system (e.g., `climate.myplaceiq_system`).
-- Support for temperature control (`SetZoneHeatTemperature`, `SetAirconHeatTemperature`, etc.) and HVAC modes (`heat`, `cool`, `dry`, `fan`, `off`).
-- Integration with thermostat cards for temperature and mode control.
-- Optimistic updates for temperature and mode changes.
-
-## [1.0.0] - 2025-10-10
-### Added
-- First official release so contains all added functionality that has been mentioned in previous changelog updates.
-
-### Fixed
-- Resolved `AttributeError: 'ConfigEntry' object has no attribute '_update_listener'` in the options flow.
-- Improved coordinator to correctly apply the `poll_interval` setting without resetting to default (60 seconds).
-
-### Changed
-- Updated `async_config_entry_first_refresh` to `async_refresh` to avoid deprecation warnings in Home Assistant 2025.11.
