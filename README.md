@@ -73,7 +73,7 @@ DISCLAIMER: There are probably many ways to do this, all differing from platform
 - In order for the app to sync with Home Assistant, "Hub Remote Access" must be turned on (Found under "Settings/Hub Settings"). If you have this turned off, the myplaceiq app will only reflect what has been changed in Home Assistant when you restart the application. This doesn't impact the way Home Assistant interacts with the myplaceiq hub but it's good to know.
 
 ## Requirements
-- Home Assistant 2023.9 or later.
+- Home Assistant 2024.6 or later.
 
 ## Development
 - **Issues**: Report bugs or feature requests at [GitHub Issues](https://github.com/anwickes/myplaceiq/issues).
