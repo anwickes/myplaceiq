@@ -266,13 +266,18 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
             body = json.loads(data["body"])
             aircon = body.get("aircons", {}).get(self._entity_id, {})
             mode = aircon.get("mode", "heat")
+            
+            # Cool and Fan modes both share cooling fan parameters (isMyFanCoolingEnabled / fanSpeedCool)
+            is_cool_or_fan = mode in ("cool", "fan")
+            
             is_auto = (
-                aircon.get("isMyFanCoolingEnabled", False) if mode == "cool"
+                aircon.get("isMyFanCoolingEnabled", False) if is_cool_or_fan
                 else aircon.get("isMyFanHeatingEnabled", False)
             )
             if is_auto:
                 return FAN_AUTO
-            speed = aircon.get("fanSpeedCool" if mode == "cool" else "fanSpeedHeat")
+            
+            speed = aircon.get("fanSpeedCool" if is_cool_or_fan else "fanSpeedHeat")
             return str(speed) if speed is not None else None
         except (json.JSONDecodeError, TypeError) as err:
             logger.error("Failed to parse fan mode for %s: %s", self._attr_unique_id, err)
@@ -290,43 +295,43 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
         body = json.loads(data["body"])
         aircon = body.get("aircons", {}).get(self._entity_id, {})
         mode = aircon.get("mode", "heat")
-        is_cool = mode == "cool"
+        
+        # Cool and Fan modes both share cooling fan commands and keys
+        is_cool_or_fan = mode in ("cool", "fan")
 
         commands = []
         if fan_mode == FAN_AUTO:
             commands.append({
                 "commands": [{
-                    "__type": "SetMyFanCoolingEnabled" if is_cool else "SetMyFanHeatingEnabled",
+                    "__type": "SetMyFanCoolingEnabled" if is_cool_or_fan else "SetMyFanHeatingEnabled",
                     "airconId": self._entity_id,
                     "isEnabled": True
                 }]
             })
-            aircon["isMyFanCoolingEnabled" if is_cool else "isMyFanHeatingEnabled"] = True
+            aircon["isMyFanCoolingEnabled" if is_cool_or_fan else "isMyFanHeatingEnabled"] = True
         else:
             try:
                 speed = int(fan_mode)
             except ValueError:
                 logger.warning("Unsupported fan mode %s for %s", fan_mode, self._entity_id)
                 return
-            # MyFan has to be explicitly switched off first, as its own
-            # command, before the hub will accept a manual speed - it does
-            # not happen implicitly just because a speed was sent.
+            
             commands.append({
                 "commands": [{
-                    "__type": "SetMyFanCoolingEnabled" if is_cool else "SetMyFanHeatingEnabled",
+                    "__type": "SetMyFanCoolingEnabled" if is_cool_or_fan else "SetMyFanHeatingEnabled",
                     "airconId": self._entity_id,
                     "isEnabled": False
                 }]
             })
             commands.append({
                 "commands": [{
-                    "__type": "SetAirconCoolFanSpeed" if is_cool else "SetAirconHeatFanSpeed",
+                    "__type": "SetAirconCoolFanSpeed" if is_cool_or_fan else "SetAirconHeatFanSpeed",
                     "airconId": self._entity_id,
                     "fanSpeed": speed
                 }]
             })
-            aircon["isMyFanCoolingEnabled" if is_cool else "isMyFanHeatingEnabled"] = False
-            aircon["fanSpeedCool" if is_cool else "fanSpeedHeat"] = speed
+            aircon["isMyFanCoolingEnabled" if is_cool_or_fan else "isMyFanHeatingEnabled"] = False
+            aircon["fanSpeedCool" if is_cool_or_fan else "fanSpeedHeat"] = speed
 
         # Optimistic update
         body["aircons"][self._entity_id] = aircon
