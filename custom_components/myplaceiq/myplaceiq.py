@@ -13,6 +13,14 @@ logger = logging.getLogger(__name__)
 # the expected response, not an error path.
 HUB_CONNECTION_LIFETIME_HINT = 20
 
+class CannotConnect(HomeAssistantError):
+    """Error to indicate we cannot connect to the hub."""
+
+
+class InvalidAuth(HomeAssistantError):
+    """Error to indicate there is invalid auth (e.g. 4001 close code or bad response)."""
+
+
 class MyPlaceIQ:
     """Class to communicate with MyPlaceIQ API.
 
@@ -125,6 +133,35 @@ class MyPlaceIQ:
                 if not fut.done():
                     fut.set_exception(HomeAssistantError("Connection closed before reply received"))
             self._pending_replies.clear()
+
+    async def validate_credentials(self) -> bool:
+        """One-shot test to validate credentials during setup/config flow."""
+        async with self._lock:
+            try:
+                ws = await self._ensure_connected()
+                reply_uuid = str(uuid.uuid1())
+                command = {"commands": [{"__type": "GetFullDataEvent", "replyUuid": reply_uuid}]}
+                message = {"uuid": str(uuid.uuid1()), "body": json.dumps(command)}
+
+                fut = asyncio.get_running_loop().create_future()
+                self._pending_replies[reply_uuid] = fut
+
+                await ws.send_json(message)
+                response = await asyncio.wait_for(fut, timeout=10)
+
+                body = json.loads(response.get("body", "{}"))
+                if not body or ("aircons" not in body and "id" not in body):
+                    raise InvalidAuth("Response payload missing required system snapshot fields")
+                return True
+            except InvalidAuth:
+                raise
+            except (CannotConnect, asyncio.TimeoutError, aiohttp.ClientError, HomeAssistantError) as err:
+                # The QHub drops/closes the connection (code 4001) when credentials are bad,
+                # which causes reader_loop or fut to fail with "Connection closed before reply received".
+                # Map this dropped connection during validation directly to InvalidAuth.
+                raise InvalidAuth(f"Hub rejected connection/credentials during handshake: {err}") from err
+            finally:
+                await self._close()
 
     async def _close(self) -> None:
         """Close the current connection. Caller must hold self._lock."""

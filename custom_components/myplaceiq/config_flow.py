@@ -12,6 +12,8 @@ from .const import (
     CONF_POLL_INTERVAL
 )
 
+from .myplaceiq import MyPlaceIQ, CannotConnect, InvalidAuth
+
 logger = logging.getLogger(__name__)
 
 CONFIG_SCHEMA = vol.Schema({
@@ -44,6 +46,10 @@ class MyPlaceIQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(f"{DOMAIN}_{client_id}")
                 self._abort_if_unique_id_configured()
 
+                # Validate credentials before saving
+                client = MyPlaceIQ(host, port, client_id, client_secret)
+                await client.validate_credentials()
+
                 logger.debug("Creating config entry with poll_interval: %s", poll_interval)
                 return self.async_create_entry(
                     title=f"MyPlaceIQ {host}:{port}",
@@ -57,6 +63,12 @@ class MyPlaceIQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_POLL_INTERVAL: poll_interval,
                     },
                 )
+            except InvalidAuth:
+                logger.warning("Invalid credentials supplied during config flow")
+                errors["base"] = "invalid_auth"
+            except CannotConnect:
+                logger.warning("Could not connect to hub during config flow")
+                errors["base"] = "cannot_connect"
             except Exception as err: # pylint: disable=broad-exception-caught
                 logger.error("Error during config flow: %s", err)
                 errors["base"] = "unknown"
@@ -101,6 +113,10 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
                 elif not isinstance(port, int) or port < 1 or port > 65535:
                     errors[CONF_PORT] = "invalid_port"
                 else:
+                    # Validate updated credentials
+                    client = MyPlaceIQ(host, port, client_id, client_secret)
+                    await client.validate_credentials()
+                    
                     logger.debug("Updating config entry with new poll_interval: %s", poll_interval)
                     new_unique_id = f"{DOMAIN}_{client_id}"
                     if new_unique_id != config_entry.unique_id:
@@ -138,6 +154,12 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
 
                     logger.debug("Config entry updated successfully: %s", config_entry.options)
                     return self.async_create_entry(title="", data=None)
+            except InvalidAuth:
+                logger.warning("Invalid credentials supplied during options flow")
+                errors["base"] = "invalid_auth"
+            except CannotConnect:
+                logger.warning("Could not connect to hub during options flow")
+                errors["base"] = "cannot_connect"
             except Exception as err: # pylint: disable=broad-exception-caught
                 logger.error("Error during options flow: %s", err)
                 errors["base"] = "unknown"
