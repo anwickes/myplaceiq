@@ -1,7 +1,6 @@
 import json
 import logging
 import time
-import asyncio
 from homeassistant.components.climate import (
     ClimateEntity, ClimateEntityFeature, HVACMode, PRESET_NONE
 )
@@ -15,6 +14,14 @@ logger = logging.getLogger(__name__)
 
 PRESET_PRIORITY = "Priority"
 PRESET_NORMAL = PRESET_NONE
+
+# Fan speed is a whole-of-aircon setting. "auto" maps to the "MyFan"
+# auto-load feature (isMyFanHeatingEnabled/isMyFanCoolingEnabled);
+# the numeric modes map to a manual fanSpeedHeat/fanSpeedCool value.
+# Fan speed is not controllable in dry mode at all - the official 
+# app greys the control out there too, so no dry-mode command exists 
+# to capture.
+FAN_AUTO = "auto"
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
     """Set up MyPlaceIQ climate entities from a config entry."""
@@ -114,6 +121,14 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
         else:
             self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
             self._attr_preset_modes = None
+
+        if not is_zone:
+            allowed_fan_speeds = entity_data.get("allowedFanSpeeds", 3)
+            self._attr_fan_modes = [FAN_AUTO] + [
+                str(speed) for speed in range(1, allowed_fan_speeds + 1)
+            ]
+            self._attr_supported_features |= ClimateEntityFeature.FAN_MODE
+
         self._last_known_is_on = None
 
     def _handle_coordinator_update(self):
@@ -239,6 +254,95 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
             logger.error("Failed to parse preset mode for %s: %s", self._attr_unique_id, err)
             return PRESET_NORMAL
 
+    @property
+    def fan_mode(self):
+        """Return the current fan mode (aircon-level only)."""
+        if self._is_zone:
+            return None
+        data = self.coordinator.data
+        if not isinstance(data, dict) or not data or "body" not in data:
+            return None
+        try:
+            body = json.loads(data["body"])
+            aircon = body.get("aircons", {}).get(self._entity_id, {})
+            mode = aircon.get("mode", "heat")
+            
+            # Cool and Fan modes both share cooling fan parameters (isMyFanCoolingEnabled / fanSpeedCool)
+            is_cool_or_fan = mode in ("cool", "fan")
+            
+            is_auto = (
+                aircon.get("isMyFanCoolingEnabled", False) if is_cool_or_fan
+                else aircon.get("isMyFanHeatingEnabled", False)
+            )
+            if is_auto:
+                return FAN_AUTO
+            
+            speed = aircon.get("fanSpeedCool" if is_cool_or_fan else "fanSpeedHeat")
+            return str(speed) if speed is not None else None
+        except (json.JSONDecodeError, TypeError) as err:
+            logger.error("Failed to parse fan mode for %s: %s", self._attr_unique_id, err)
+            return None
+
+    async def async_set_fan_mode(self, fan_mode: str) -> None:
+        """Set the fan mode (aircon-level only): 'auto', '1', '2', or '3'."""
+        if self._is_zone:
+            logger.warning("Zone %s does not support fan mode", self._entity_id)
+            return
+
+        data = self.coordinator.data
+        if not isinstance(data, dict) or not data or "body" not in data:
+            return
+        body = json.loads(data["body"])
+        aircon = body.get("aircons", {}).get(self._entity_id, {})
+        mode = aircon.get("mode", "heat")
+        
+        # Cool and Fan modes both share cooling fan commands and keys
+        is_cool_or_fan = mode in ("cool", "fan")
+
+        commands = []
+        if fan_mode == FAN_AUTO:
+            commands.append({
+                "commands": [{
+                    "__type": "SetMyFanCoolingEnabled" if is_cool_or_fan else "SetMyFanHeatingEnabled",
+                    "airconId": self._entity_id,
+                    "isEnabled": True
+                }]
+            })
+            aircon["isMyFanCoolingEnabled" if is_cool_or_fan else "isMyFanHeatingEnabled"] = True
+        else:
+            try:
+                speed = int(fan_mode)
+            except ValueError:
+                logger.warning("Unsupported fan mode %s for %s", fan_mode, self._entity_id)
+                return
+            
+            commands.append({
+                "commands": [{
+                    "__type": "SetMyFanCoolingEnabled" if is_cool_or_fan else "SetMyFanHeatingEnabled",
+                    "airconId": self._entity_id,
+                    "isEnabled": False
+                }]
+            })
+            commands.append({
+                "commands": [{
+                    "__type": "SetAirconCoolFanSpeed" if is_cool_or_fan else "SetAirconHeatFanSpeed",
+                    "airconId": self._entity_id,
+                    "fanSpeed": speed
+                }]
+            })
+            aircon["isMyFanCoolingEnabled" if is_cool_or_fan else "isMyFanHeatingEnabled"] = False
+            aircon["fanSpeedCool" if is_cool_or_fan else "fanSpeedHeat"] = speed
+
+        # Optimistic update
+        body["aircons"][self._entity_id] = aircon
+        self.coordinator.data["body"] = json.dumps(body)
+        logger.debug("Optimistic update for %s: set fan_mode to %s", self._attr_name, fan_mode)
+        self.async_write_ha_state()
+
+        for command in commands:
+            await self._myplaceiq.send_command(command)
+        await self.coordinator.async_request_refresh_after_command()
+
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
         temperature = kwargs.get("temperature")
@@ -281,8 +385,7 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
         self.async_write_ha_state()
 
         await self._myplaceiq.send_command(command)
-        await asyncio.sleep(2)
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_request_refresh_after_command()
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Set new HVAC mode."""
@@ -356,8 +459,7 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
         self.async_write_ha_state()
 
         await self._myplaceiq.send_command(command)
-        await asyncio.sleep(2)
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_request_refresh_after_command()
 
     async def async_set_preset_mode(self, preset_mode):
         """Set priority preset mode for zone entities."""
@@ -390,5 +492,4 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
         self.async_write_ha_state()
 
         await self._myplaceiq.send_command(command)
-        await asyncio.sleep(2)
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_request_refresh_after_command()

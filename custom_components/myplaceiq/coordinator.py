@@ -3,10 +3,36 @@ import json
 import time
 from datetime import timedelta
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from .const import DOMAIN
 
 logger = logging.getLogger(__name__)
+
+# How long to wait, after the *last* post-command refresh request, before
+# actually polling. This is now a backstop rather than the primary
+# confirmation path (see _handle_push below) - kept in case a push is
+# ever dropped - so a generous cooldown is fine.
+POST_COMMAND_REFRESH_COOLDOWN = 3
+
+
+def _deep_merge(dst: dict, src: dict) -> dict:
+    """Recursively merge src into dst in place, and return dst.
+
+    MyPlaceIQ's push messages are partial - they only ever contain the
+    fields that actually changed - so anything src doesn't mention must be
+    left exactly as it was in dst. Nested dicts are merged key by key;
+    any other value (including lists) in src replaces the corresponding
+    value in dst outright, since there's no meaningful per-element merge
+    for e.g. a list of allowed modes.
+    """
+    for key, value in src.items():
+        if isinstance(value, dict) and isinstance(dst.get(key), dict):
+            _deep_merge(dst[key], value)
+        else:
+            dst[key] = value
+    return dst
+
 
 class MyPlaceIQDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching MyPlaceIQ data."""
@@ -16,6 +42,11 @@ class MyPlaceIQDataUpdateCoordinator(DataUpdateCoordinator):
         self.myplaceiq = myplaceiq
         self.hass = hass
         self._last_valid_data = None
+        # Canonical cached full state body, kept current by merging every
+        # unsolicited push on top of it. None until the first successful
+        # GetFullDataEvent poll completes - a partial push on its own is
+        # never safe to treat as if it were the whole state.
+        self._body: dict | None = None
         logger.debug("Initializing MyPlaceIQDataUpdateCoordinator with update_interval: %s seconds",
                      update_interval)
         super().__init__(
@@ -24,9 +55,54 @@ class MyPlaceIQDataUpdateCoordinator(DataUpdateCoordinator):
             name=DOMAIN,
             update_interval=timedelta(seconds=update_interval),
         )
+        self._post_command_debouncer = Debouncer(
+            hass,
+            logger,
+            cooldown=POST_COMMAND_REFRESH_COOLDOWN,
+            immediate=False,
+            function=self.async_refresh,
+        )
+        # The hub streams a live delta to every open connection whenever
+        # anything changes, independent of polling. Without this wired
+        # up, nothing ever reads those pushes and HA only ever learns
+        # about a change at its next scheduled poll
+        self.myplaceiq.set_push_callback(self._handle_push)
+
+    def _handle_push(self, body: dict) -> None:
+        """Handle an unsolicited push from the hub (called from the reader task).
+
+        Merges the partial delta into our cached full body and publishes
+        it immediately via async_set_updated_data, instead of waiting for
+        the next scheduled poll to notice.
+        """
+        if self._body is None:
+            logger.debug("Ignoring push received before initial full sync: keys=%s",
+                         list(body.keys()))
+            return
+        _deep_merge(self._body, body)
+        self._publish_body()
+
+    def _publish_body(self) -> None:
+        """Publish the current merged body as the coordinator's data."""
+        response = dict(self._last_valid_data or {})
+        response["body"] = json.dumps(self._body)
+        self._last_valid_data = response
+        self.async_set_updated_data(response)
+
+    async def async_request_refresh_after_command(self):
+        """Request a refresh after an entity sends a set_* command.
+
+        This is a backstop, not the primary confirmation path: the
+        hub's own push for the command we just sent normally arrives
+        (and is merged via _handle_push) within well under a second.
+        Debounced (trailing-edge, not immediate) so a burst of several
+        entities each calling this collapses into a single poll fired
+        after the *last* call, in case a push was ever dropped.
+        """
+        await self._post_command_debouncer.async_call()
 
     async def _async_update_data(self):
-        """Fetch data from MyPlaceIQ."""
+        """Fetch a full, authoritative snapshot from MyPlaceIQ."""
         start_time = time.time()
         logger.debug("Poll started at %s (interval: %s seconds)",
                      time.strftime("%H:%M:%S", time.localtime(start_time)),
@@ -59,6 +135,11 @@ class MyPlaceIQDataUpdateCoordinator(DataUpdateCoordinator):
                          aircon.get("mode", "missing"),
                          len(body.get("zones", {})))
 
+            # GetFullDataEvent replies are always complete snapshots - this
+            # is confirmed via replyUuid correlation in MyPlaceIQ, so it's
+            # safe to wholesale-replace our cached body here (unlike a
+            # push, which only ever merges partially - see _handle_push).
+            self._body = body
             response["body"] = json.dumps(body)
             self._last_valid_data = response
             return response
