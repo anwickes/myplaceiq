@@ -82,8 +82,4 @@ async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload the config entry when options are updated."""
     logger.debug("Reloading MyPlaceIQ entry: %s with new options: %s",
         entry.entry_id, entry.options)
-    if entry.options.get("_skip_reload", False):
-        logger.debug("Skipping reload for entry %s due to _skip_reload flag", entry.entry_id)
-        return
-    await async_unload_entry(hass, entry)
-    await async_setup_entry(hass, entry)
+    await hass.config_entries.async_reload(entry.entry_id)
