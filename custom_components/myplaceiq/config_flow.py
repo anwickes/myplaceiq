@@ -1,5 +1,4 @@
 import logging
-from datetime import timedelta
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
@@ -11,6 +10,8 @@ from .const import (
     CONF_CLIENT_SECRET,
     CONF_POLL_INTERVAL
 )
+
+from .myplaceiq import MyPlaceIQ, CannotConnect, InvalidAuth
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,10 @@ class MyPlaceIQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await self.async_set_unique_id(f"{DOMAIN}_{client_id}")
                 self._abort_if_unique_id_configured()
 
+                # Validate credentials before saving
+                client = MyPlaceIQ(host, port, client_id, client_secret)
+                await client.validate_credentials()
+
                 logger.debug("Creating config entry with poll_interval: %s", poll_interval)
                 return self.async_create_entry(
                     title=f"MyPlaceIQ {host}:{port}",
@@ -57,6 +62,12 @@ class MyPlaceIQConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_POLL_INTERVAL: poll_interval,
                     },
                 )
+            except InvalidAuth:
+                logger.warning("Invalid credentials supplied during config flow")
+                errors["base"] = "invalid_auth"
+            except CannotConnect:
+                logger.warning("Could not connect to hub during config flow")
+                errors["base"] = "cannot_connect"
             except Exception as err: # pylint: disable=broad-exception-caught
                 logger.error("Error during config flow: %s", err)
                 errors["base"] = "unknown"
@@ -101,43 +112,43 @@ class MyPlaceIQOptionsFlow(config_entries.OptionsFlow):
                 elif not isinstance(port, int) or port < 1 or port > 65535:
                     errors[CONF_PORT] = "invalid_port"
                 else:
-                    logger.debug("Updating config entry with new poll_interval: %s", poll_interval)
+                    # Validate updated credentials
+                    client = MyPlaceIQ(host, port, client_id, client_secret)
+                    await client.validate_credentials()
+                    
                     new_unique_id = f"{DOMAIN}_{client_id}"
+                    unique_id_kwargs = {}
                     if new_unique_id != config_entry.unique_id:
-                        await self.hass.config_entries.async_set_unique_id(
-                            config_entry.entry_id, new_unique_id)
+                        for other in self.hass.config_entries.async_entries(DOMAIN):
+                            if (other.entry_id != config_entry.entry_id
+                                    and other.unique_id == new_unique_id):
+                                errors[CONF_CLIENT_ID] = "already_configured"
+                                break
+                        else:
+                            unique_id_kwargs["unique_id"] = new_unique_id
 
-                    self.hass.config_entries.async_update_entry(
-                        config_entry,
-                        data={
-                            CONF_HOST: host,
-                            CONF_PORT: port,
-                            CONF_CLIENT_ID: client_id,
-                            CONF_CLIENT_SECRET: client_secret,
-                        },
-                        options={
-                            CONF_POLL_INTERVAL: poll_interval,
-                            "_skip_reload": True,
-                        },
-                    )
-
-                    if config_entry.entry_id in self.hass.data.get(DOMAIN, {}):
-                        coordinator = self.hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
-                        coordinator.update_interval = timedelta(seconds=poll_interval)
-                        await coordinator.async_refresh()
-                        logger.debug("Updated coordinator update_interval to %s seconds",
-                            poll_interval)
-
-                    self.hass.config_entries.async_update_entry(
-                        config_entry,
-                        options={
-                            CONF_POLL_INTERVAL: poll_interval,
-                            "_skip_reload": False,
-                        },
-                    )
-
-                    logger.debug("Config entry updated successfully: %s", config_entry.options)
-                    return self.async_create_entry(title="", data=None)
+                    if not errors:
+                        logger.debug("Updating config entry (poll_interval: %s)", poll_interval)
+                        self.hass.config_entries.async_update_entry(
+                            config_entry,
+                            data={
+                                CONF_HOST: host,
+                                CONF_PORT: port,
+                                CONF_CLIENT_ID: client_id,
+                                CONF_CLIENT_SECRET: client_secret,
+                            },
+                            options={CONF_POLL_INTERVAL: poll_interval},
+                            **unique_id_kwargs,
+                        )
+                        logger.debug("Config entry updated successfully: %s",
+                            config_entry.options)
+                        return self.async_create_entry(title="", data=None)
+            except InvalidAuth:
+                logger.warning("Invalid credentials supplied during options flow")
+                errors["base"] = "invalid_auth"
+            except CannotConnect:
+                logger.warning("Could not connect to hub during options flow")
+                errors["base"] = "cannot_connect"
             except Exception as err: # pylint: disable=broad-exception-caught
                 logger.error("Error during options flow: %s", err)
                 errors["base"] = "unknown"
