@@ -61,6 +61,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
         for zone_id in aircon_data.get("zoneOrder", []):
             zone_data = zones.get(zone_id)
             if zone_data and zone_data.get("isVisible", False):
+                # Under QTemp every zone reports isPriorityZoneAllowed =
+                # false, so also treat QTemp itself as "may become
+                # priority-capable" - the preset is then shown or hidden
+                # live, depending on the mode the hub is in.
                 entities.append(
                     MyPlaceIQClimate(
                         coordinator=coordinator,
@@ -69,7 +73,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
                         entity_id=zone_id,
                         entity_data=zone_data,
                         is_zone=True,
-                        aircon_id=aircon_id
+                        aircon_id=aircon_id,
+                        priority_capable=(
+                            zone_data.get("isPriorityZoneAllowed", False)
+                            or aircon_data.get("airconSettings", {}).get("zoneOperation") == "qTemp"
+                        )
                     )
                 )
 
@@ -96,7 +104,8 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
         entity_id,
         entity_data,
         is_zone,
-        aircon_id=None
+        aircon_id=None,
+        priority_capable=False
     ):
         """Initialize the climate entity."""
         super().__init__(coordinator)
@@ -113,14 +122,12 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
             [HVACMode.AUTO, HVACMode.OFF] if is_zone else
             [HVACMode.HEAT, HVACMode.COOL, HVACMode.DRY, HVACMode.FAN_ONLY, HVACMode.OFF]
         )
-        if is_zone and entity_data.get("isPriorityZoneAllowed", False):
-            self._attr_supported_features = (
-                ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.PRESET_MODE
-            )
-            self._attr_preset_modes = [PRESET_PRIORITY, PRESET_NORMAL]
-        else:
-            self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
-            self._attr_preset_modes = None
+        # Whether this zone can ever offer the Priority preset. Whether it
+        # does *right now* depends on the live isPriorityZoneAllowed (see
+        # _priority_available) - the hub turns it off for every zone while
+        # QTemp is choosing the priority zone.
+        self._priority_capable = is_zone and priority_capable
+        self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
 
         if not is_zone:
             allowed_fan_speeds = entity_data.get("allowedFanSpeeds", 3)
@@ -130,6 +137,37 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
             self._attr_supported_features |= ClimateEntityFeature.FAN_MODE
 
         self._last_known_is_on = None
+
+    def _priority_available(self) -> bool:
+        """Return True if the Priority preset can be used on this zone right now."""
+        if not self._priority_capable:
+            return False
+        data = self.coordinator.data
+        if not isinstance(data, dict) or not data or "body" not in data:
+            return False
+        try:
+            body = json.loads(data["body"])
+        except (json.JSONDecodeError, TypeError):
+            return False
+        zone = body.get("zones", {}).get(self._entity_id, {})
+        return bool(zone.get("isPriorityZoneAllowed", False))
+
+    @property
+    def supported_features(self):
+        """Return supported features, adding PRESET_MODE only while priority is selectable."""
+        features = ClimateEntityFeature.TARGET_TEMPERATURE
+        if not self._is_zone:
+            features |= ClimateEntityFeature.FAN_MODE
+        elif self._priority_available():
+            features |= ClimateEntityFeature.PRESET_MODE
+        return features
+
+    @property
+    def preset_modes(self):
+        """Return the preset modes, or None while priority is not selectable."""
+        if self._priority_available():
+            return [PRESET_PRIORITY, PRESET_NORMAL]
+        return None
 
     def _handle_coordinator_update(self):
         """Handle updated data from the coordinator."""
@@ -237,7 +275,7 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
     @property
     def preset_mode(self):
         """Return the current preset mode for zone entities."""
-        if not self._is_zone or self._attr_preset_modes is None:
+        if not self._is_zone or not self._priority_available():
             return None
         data = self.coordinator.data
         if not isinstance(data, dict) or not data or "body" not in data:
@@ -463,8 +501,9 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
 
     async def async_set_preset_mode(self, preset_mode):
         """Set priority preset mode for zone entities."""
-        if not self._is_zone or self._attr_preset_modes is None:
-            logger.warning("Preset mode not supported for %s", self._attr_unique_id)
+        if not self._is_zone or not self._priority_available():
+            logger.warning("Preset mode not supported for %s (priority zone selection is "
+                           "unavailable, e.g. QTemp is active)", self._attr_unique_id)
             return
 
         data = self.coordinator.data

@@ -116,8 +116,13 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                     )
                 )
 
-            # Priority toggle button (for any zone where priority is allowed)
-            if zone_data.get("isPriorityZoneAllowed", False):
+            # Priority toggle button (for any zone where priority is allowed).
+            # Under QTemp the hub reports every zone as not allowed, so we
+            # cannot tell which zones qualify; create the button for all of
+            # them so it exists when the user switches back to priority
+            # mode, and refuse the press while QTemp is active.
+            if (zone_data.get("isPriorityZoneAllowed", False)
+                    or aircon_data.get("airconSettings", {}).get("zoneOperation") == "qTemp"):
                 entities.append(
                     MyPlaceIQButton(
                         coordinator=coordinator,
@@ -254,6 +259,11 @@ class MyPlaceIQButton(ButtonEntity):
             elif self._command_type == "SetPriorityZone" and self._action == "toggle_priority":
                 # Priority toggle: read current isPriorityZone and flip it
                 zone = body.get("zones", {}).get(self._entity_id, {})
+                if not zone.get("isPriorityZoneAllowed", False):
+                    raise HomeAssistantError(
+                        "Priority zone cannot be set for this zone right now "
+                        "(QTemp selects the priority zone automatically)"
+                    )
                 current_priority = zone.get("isPriorityZone", False)
                 new_priority = not current_priority
                 command = {

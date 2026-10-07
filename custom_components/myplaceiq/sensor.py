@@ -45,6 +45,12 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 aircon_data,
                 zones
             ),
+            MyPlaceIQActiveControlZoneSensor(
+                coordinator,
+                config_entry,
+                aircon_id,
+                aircon_data
+            ),
         ])
 
     # Zone Sensors (Temperature and State)
@@ -139,6 +145,66 @@ class MyPlaceIQAirconSensor(CoordinatorEntity, SensorEntity):
     @property
     def device_info(self):
         """Return device information."""
+        return {
+            "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}")},
+            "name": f"Aircon {self._name}",
+            "manufacturer": "MyPlaceIQ",
+            "model": "Aircon",
+        }
+
+class MyPlaceIQActiveControlZoneSensor(CoordinatorEntity, SensorEntity):
+    # pylint: disable=too-many-instance-attributes
+    """Sensor reporting which zone is currently driving the aircon.
+
+    With manual priority this is the zone the user chose; with QTemp it is
+    the zone the hub itself picked as needing the most heating or cooling,
+    which changes on its own. The hub reports it as activeControlZoneName.
+    """
+
+    def __init__(self, coordinator, config_entry, aircon_id, aircon_data):
+        super().__init__(coordinator)
+        self._aircon_id = aircon_id
+        self._config_entry = config_entry
+        self._name = aircon_data.get("name", "Aircon")
+        self._attr_unique_id = f"{config_entry.entry_id}_aircon_{aircon_id}_active_control_zone"
+        self._attr_name = "Active Control Zone"
+        self._attr_icon = "mdi:thermometer-auto"
+
+    def _get_aircon(self):
+        """Return this aircon's current data, or None if unavailable."""
+        data = self.coordinator.data
+        if not isinstance(data, dict) or not data or "body" not in data:
+            return None
+        try:
+            body = json.loads(data["body"])
+        except (json.JSONDecodeError, TypeError) as err:
+            logger.error("Failed to parse coordinator data for active control zone %s: %s",
+                         self._aircon_id, err)
+            return None
+        return body.get("aircons", {}).get(self._aircon_id)
+
+    @property
+    def state(self):
+        """Return the name of the zone currently in control."""
+        aircon = self._get_aircon()
+        if not aircon:
+            return None
+        return aircon.get("activeControlZoneName") or None
+
+    @property
+    def extra_state_attributes(self):
+        """Return how that zone was chosen."""
+        aircon = self._get_aircon()
+        if not aircon:
+            return {}
+        return {
+            "zone_operation": aircon.get("airconSettings", {}).get("zoneOperation"),
+            "zone_id": aircon.get("priorityZoneId"),
+        }
+
+    @property
+    def device_info(self):
+        """Return device information - attach to the parent aircon device."""
         return {
             "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}")},
             "name": f"Aircon {self._name}",

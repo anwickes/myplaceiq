@@ -50,6 +50,10 @@ The MyPlaceIQ integration allows Home Assistant to communicate with a MyPlaceIQ 
   - Example: `sensor.main_bedroom_state`
 - **Buttons**: Toggle HVAC zones with optimistic updates.
   - Example: `button.main_bedroom_toggle`
+- **Switch**: Turn QTemp on or off. With QTemp on, the controller picks the zone that most needs heating or cooling and manual priority is disabled; with it off you choose the priority zone yourself (zone Priority preset or `*_toggle_priority` buttons). Only created on controllers that report the setting.
+  - Example: `switch.aircon_qtemp`
+- **Active Control Zone sensor**: The zone currently driving the aircon. Changes automatically under QTemp.
+  - Example: `sensor.active_control_zone`
 
 ## Notes
 ### Host & Credential Retrieval

@@ -4,6 +4,14 @@ All notable changes to the MyPlaceIQ Home Assistant integration will be document
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0]
+### Added
+- QTemp support. A new `switch` entity per aircon (`switch.<aircon>_qtemp`) turns QTemp on or off, matching the "Enable QTemp" toggle in the official app. With QTemp on, the controller itself picks the zone that most needs heating or cooling; off returns to manual priority zones. Sent as `SetAirconSettings` with the aircon's complete `airconSettings` object and only `zoneOperation` changed, exactly as the official app does.
+- A new "Active Control Zone" sensor per aircon, reporting which zone is currently driving the system (from `activeControlZoneName`). Under QTemp this changes automatically; its attributes show the `zone_operation` in force and the `zone_id`.
+
+### Changed
+- While QTemp is active the controller disables manual priority selection, so the zone climate entities now hide the `Priority` preset until priority mode is selected again (previously the preset was fixed at startup). The `toggle_priority` buttons are created in either mode, and pressing one while QTemp is active raises a clear error instead of sending a command the controller will not honour.
+
 ## [1.4.0] - 2026-10-01
 ### Added
 - Fan speed control (`auto`, `1`, `2`, `3`) on the aircon-level climate entity, for both heat and cool mode, via `SetAirconHeatFanSpeed`/`SetAirconCoolFanSpeed` and `SetMyFanHeatingEnabled`/`SetMyFanCoolingEnabled`. `fan_modes` is built from each aircon's own `allowedFanSpeeds` rather than assumed to always be 3. Fan speed is not controllable in dry mode - the hardware doesn't support it there (the official app greys the control out too), so no dry-mode fan command exists.

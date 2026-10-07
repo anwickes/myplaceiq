@@ -89,6 +89,21 @@ class MyPlaceIQDataUpdateCoordinator(DataUpdateCoordinator):
         self._last_valid_data = response
         self.async_set_updated_data(response)
 
+    def apply_local_update(self, updater) -> None:
+        """Optimistically change the cached state and publish it immediately.
+
+        updater is called with the canonical cached body (a dict) and may
+        mutate it in place. This lets an entity reflect a command it has
+        just sent without waiting for the hub's confirming push, which
+        then overwrites/confirms the value through the normal merge path.
+        Does nothing before the first full sync, for the same reason
+        _handle_push ignores early pushes.
+        """
+        if self._body is None:
+            return
+        updater(self._body)
+        self._publish_body()
+
     async def async_request_refresh_after_command(self):
         """Request a refresh after an entity sends a set_* command.
 
