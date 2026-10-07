@@ -2,11 +2,12 @@ import copy
 import json
 import logging
 from math import isfinite
+from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, aircon_device_name
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +16,10 @@ logger = logging.getLogger(__name__)
 # capture: 31.5 A is sent as 7560 W.
 NOMINAL_VOLTAGE_V = 240
 
-# Captures show the free-electricity window as a zero-cost tariff between
-# these minute offsets. The app offers these two fixed three-hour periods.
+# The free-electricity window is a zero-cost tariff between these minute
+# offsets. The app offers these two fixed three-hour periods; both, and the
+# "None" encoding (one all-day tariff, 0-0 at the normal cost), are confirmed
+# by captures of the app.
 FREE_ELECTRICITY_PERIODS = (
     ("11 am to 2 pm", 660, 840),
     ("12 pm to 3 pm", 720, 900),
@@ -46,7 +49,10 @@ def free_electricity_enabled(settings: dict) -> bool | None:
             or isinstance(stop, bool)
         ):
             return None
-        if cost == 0 and start != stop:
+        # start == stop == 0 is a single all-day tariff, so a zero cost
+        # there means the whole day is free; any other start == stop is an
+        # empty interval.
+        if cost == 0 and (start != stop or start == 0):
             return True
     return False
 
@@ -140,24 +146,6 @@ def iqe_enabled(body: dict) -> bool:
     )
 
 
-def set_iqe_entity_visibility(hass, entity, visible: bool) -> None:
-    """Hide or show an IQe entity without overriding the user's choice."""
-    if entity.entity_id is None:
-        return
-
-    registry = er.async_get(hass)
-    entry = registry.async_get(entity.entity_id)
-    if entry is None:
-        return
-
-    if visible and entry.hidden_by == er.RegistryEntryHider.INTEGRATION:
-        registry.async_update_entity(entity.entity_id, hidden_by=None)
-    elif not visible and entry.hidden_by is None:
-        registry.async_update_entity(
-            entity.entity_id, hidden_by=er.RegistryEntryHider.INTEGRATION
-        )
-
-
 def iqe_aircon_id(body: dict):
     """Return the id of the aircon IQe controls, or the first aircon as a fallback."""
     aircons = body.get("aircons", {})
@@ -176,7 +164,17 @@ class MyPlaceIQEnergySettingsEntity(CoordinatorEntity):
     just one field, so a change from Home Assistant never resets the
     others. The cache is updated synchronously before the command is sent,
     so two quick changes accumulate instead of overwriting each other.
+
+    Entities that only make sense while IQe is running set
+    _iqe_managed_visibility and are hidden while it is not (see
+    _iqe_visible). They always exist, so nothing goes "unavailable" after a
+    restart. The integration only hides an entity at the moment IQe switches
+    off, and only unhides one it hid itself, so an entity the user unhides
+    is not re-hidden while IQe stays off.
     """
+
+    _iqe_managed_visibility = False
+    _iqe_last_visible = None
 
     def __init__(self, coordinator, myplaceiq, config_entry, aircon_id, aircon_name):
         # pylint: disable=too-many-arguments, too-many-positional-arguments
@@ -231,12 +229,62 @@ class MyPlaceIQEnergySettingsEntity(CoordinatorEntity):
             raise
         await self.coordinator.async_request_refresh_after_command()
 
+    def _iqe_visible(self, body: dict) -> bool:
+        """Return whether this entity is relevant right now (override per entity)."""
+        return iqe_enabled(body)
+
+    @property
+    def entity_registry_visible_default(self) -> bool:
+        """Start hidden if IQe is not running when the entity is first registered."""
+        if not self._iqe_managed_visibility:
+            return True
+        try:
+            return self._iqe_visible(self._load_body())
+        except HomeAssistantError:
+            return True
+
+    def _sync_iqe_visibility(self, startup: bool = False) -> None:
+        """Hide or show this entity in the registry as IQe switches on and off."""
+        if not self._iqe_managed_visibility or self.hass is None or self.entity_id is None:
+            return
+        try:
+            visible = self._iqe_visible(self._load_body())
+        except HomeAssistantError:
+            return
+
+        registry = er.async_get(self.hass)
+        entry = registry.async_get(self.entity_id)
+        if entry is not None:
+            if visible and entry.hidden_by == er.RegistryEntryHider.INTEGRATION:
+                registry.async_update_entity(self.entity_id, hidden_by=None)
+            elif (
+                not visible
+                and not startup
+                and self._iqe_last_visible is not False
+                and entry.hidden_by is None
+            ):
+                registry.async_update_entity(
+                    self.entity_id, hidden_by=er.RegistryEntryHider.INTEGRATION
+                )
+        self._iqe_last_visible = visible
+
+    async def async_added_to_hass(self) -> None:
+        """Sync visibility once the entity is registered."""
+        await super().async_added_to_hass()
+        self._sync_iqe_visibility(startup=True)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Keep visibility in step with the hub before writing the new state."""
+        self._sync_iqe_visibility()
+        super()._handle_coordinator_update()
+
     @property
     def device_info(self):
         """Return device information - attach to the aircon IQe controls."""
         return {
             "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}")},
-            "name": f"Aircon {self._aircon_name}",
+            "name": aircon_device_name(self._aircon_name),
             "manufacturer": "MyPlaceIQ",
             "model": "Aircon",
         }

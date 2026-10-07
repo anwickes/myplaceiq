@@ -18,7 +18,6 @@ from .energy_settings import (
     iqe_aircon_id,
     iqe_enabled,
     iqe_supported,
-    set_iqe_entity_visibility,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,7 +56,12 @@ def _kw_spec(key, name, icon, field):
 
 
 def _trigger_spec(key, name, icon, field, min_value, max_value, enabled_field):
-    """Build a spec for an outdoor-temperature trigger."""
+    # pylint: disable=too-many-arguments, too-many-positional-arguments
+    """Build a spec for an outdoor-temperature trigger.
+
+    The ranges match the limits the official app enforces; the hub's own
+    limits are not known.
+    """
     return NumberSpec(
         key=key, name=name, icon=icon, unit=UnitOfTemperature.CELSIUS,
         device_class=NumberDeviceClass.TEMPERATURE,
@@ -69,6 +73,9 @@ def _trigger_spec(key, name, icon, field, min_value, max_value, enabled_field):
 
 
 # Wizard step -> field, confirmed by capture and the app's setup screens.
+# Note: choosing "No" to solar panels in the app sets BOTH solarPanelW and
+# maxInverterPowerW to 0 (confirmed by capture), so for the same result set
+# both of these numbers to 0.
 HUB_NUMBER_SPECS = (
     _kw_spec("solar_panel", "Solar Panel", "mdi:solar-panel", "solarPanelW"),
     _kw_spec("inverter_capacity", "Inverter Capacity", "mdi:flash", "maxInverterPowerW"),
@@ -101,7 +108,11 @@ RUNNING_CURRENT_SPEC = NumberSpec(
 
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
-    """Set up MyPlaceIQ number entities from a config entry."""
+    """Set up MyPlaceIQ number entities from a config entry.
+
+    The entities exist whenever the hub supports IQe. While IQe is not
+    running they are hidden (not removed).
+    """
     logger.debug("Setting up number entities for MyPlaceIQ")
     coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
     myplaceiq = hass.data[DOMAIN][config_entry.entry_id]["myplaceiq"]
@@ -116,50 +127,9 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         logger.debug("IQe is not supported by this hub; no number entities created")
         return
 
-    iqe_entities = []
-    numbers_added = False
-
-    def _add_number_entities(updated_body):
-        nonlocal numbers_added
-        entities = _iqe_number_entities(
-            coordinator, myplaceiq, config_entry, updated_body
-        )
-        iqe_entities.extend(entities)
-        async_add_entities(entities)
-        numbers_added = True
-        logger.debug("Added %d IQe number entities", len(entities))
-
-    def _update_number_visibility(updated_body):
-        settings = updated_body.get("energySettings", {})
-        any_mode_enabled = iqe_enabled(updated_body)
-        for entity in iqe_entities:
-            mode_enabled = (
-                entity._spec.enabled_field is None
-                or settings.get(entity._spec.enabled_field) is True
-            )
-            set_iqe_entity_visibility(
-                hass, entity, any_mode_enabled and mode_enabled
-            )
-
-    if iqe_enabled(body):
-        _add_number_entities(body)
-
-    def _handle_iqe_number_update():
-        try:
-            updated_body = json.loads(coordinator.data["body"])
-        except (KeyError, TypeError, ValueError) as err:
-            logger.error("Failed to parse coordinator data for IQe numbers: %s", err)
-            return
-        if not iqe_supported(updated_body):
-            return
-        if iqe_enabled(updated_body) and not numbers_added:
-            _add_number_entities(updated_body)
-        if numbers_added:
-            _update_number_visibility(updated_body)
-
-    config_entry.async_on_unload(
-        coordinator.async_add_listener(_handle_iqe_number_update)
-    )
+    entities = _iqe_number_entities(coordinator, myplaceiq, config_entry, body)
+    async_add_entities(entities)
+    logger.debug("Added %d IQe number entities", len(entities))
 
 
 def _iqe_number_entities(coordinator, myplaceiq, config_entry, body):
@@ -193,6 +163,7 @@ class MyPlaceIQEnergyNumber(MyPlaceIQEnergySettingsEntity, NumberEntity):
 
     _attr_entity_category = EntityCategory.CONFIG
     _attr_mode = NumberMode.BOX
+    _iqe_managed_visibility = True
 
     def __init__(self, coordinator, myplaceiq, config_entry, aircon_id, aircon_name, spec):
         # pylint: disable=too-many-arguments, too-many-positional-arguments
@@ -202,20 +173,19 @@ class MyPlaceIQEnergyNumber(MyPlaceIQEnergySettingsEntity, NumberEntity):
         self._attr_unique_id = f"{config_entry.entry_id}_{scope}_iqe_{spec.key}"
         self._attr_has_entity_name = True
         self._attr_name = f"HVAC IQe {spec.name}"
-        settings = self._energy_settings() or {}
-        self._attr_entity_registry_visible_default = (
-            iqe_enabled(self._load_body())
-            and (
-                spec.enabled_field is None
-                or settings.get(spec.enabled_field) is True
-            )
-        )
         self._attr_icon = spec.icon
         self._attr_native_unit_of_measurement = spec.unit
         self._attr_device_class = spec.device_class
         self._attr_native_min_value = spec.min_value
         self._attr_native_max_value = spec.max_value
         self._attr_native_step = spec.step
+
+    def _iqe_visible(self, body: dict) -> bool:
+        """Show while IQe runs, and for trigger numbers only while their mode is on."""
+        if not iqe_enabled(body):
+            return False
+        field = self._spec.enabled_field
+        return field is None or body.get("energySettings", {}).get(field) is True
 
     @property
     def native_value(self):

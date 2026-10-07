@@ -6,13 +6,11 @@ from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, aircon_device_name
 from .energy_settings import (
     MyPlaceIQEnergySettingsEntity,
     iqe_aircon_id,
-    iqe_enabled,
     iqe_supported,
-    set_iqe_entity_visibility,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,6 +32,8 @@ IQE_SWITCHES = (
     ("auto_heating", "Auto Heating", "smartAirHeatOn"),
 )
 
+# smartAirEnabledDays is indexed from Sunday, even though the app's own
+# setup screen lists Monday first (confirmed against the app).
 IQE_WEEKDAYS = (
     ("sunday", "Sunday"),
     ("monday", "Monday"),
@@ -46,7 +46,11 @@ IQE_WEEKDAYS = (
 
 
 def _iqe_switches(coordinator, myplaceiq, config_entry, body):
-    """Return IQe enable switches and, while enabled, its other controls."""
+    """Return the IQe auto cooling/heating switches and weekday switches.
+
+    The weekday switches are hidden (not removed) while IQe is not running;
+    see MyPlaceIQEnergySettingsEntity.
+    """
     if not iqe_supported(body):
         return []
     aircon_id = iqe_aircon_id(body)
@@ -59,21 +63,13 @@ def _iqe_switches(coordinator, myplaceiq, config_entry, body):
         )
         for key, label, field in IQE_SWITCHES
     ]
-    if iqe_enabled(body):
-        entities.extend(_iqe_enabled_day_switches(
-            coordinator, myplaceiq, config_entry, aircon_id, name
-        ))
-    return entities
-
-
-def _iqe_enabled_day_switches(coordinator, myplaceiq, config_entry, aircon_id, name):
-    """Create weekday switches for an enabled IQe configuration."""
-    return [
+    entities.extend(
         MyPlaceIQIQeEnabledDaySwitch(
             coordinator, myplaceiq, config_entry, aircon_id, name, index, key, label
         )
         for index, (key, label) in enumerate(IQE_WEEKDAYS)
-    ]
+    )
+    return entities
 
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
@@ -110,39 +106,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         async_add_entities(entities)
         logger.debug("Added %d switch entities", len(entities))
     else:
-        logger.debug("No switch entities created; hub reports no zoneOperation setting")
-
-    day_switches = [
-        entity for entity in entities
-        if isinstance(entity, MyPlaceIQIQeEnabledDaySwitch)
-    ]
-    if iqe_supported(body):
-        iqe_days_added = bool(day_switches)
-        def _add_iqe_settings_when_enabled():
-            nonlocal body, iqe_days_added
-            try:
-                body = json.loads(coordinator.data["body"])
-            except (KeyError, TypeError, ValueError) as err:
-                logger.error("Failed to parse coordinator data for IQe switches: %s", err)
-                return
-            enabled = iqe_enabled(body)
-            if enabled and not iqe_days_added:
-                aircon_id = iqe_aircon_id(body)
-                if aircon_id is not None:
-                    name = body["aircons"][aircon_id].get("name", "Aircon")
-                    new_day_switches = _iqe_enabled_day_switches(
-                        coordinator, myplaceiq, config_entry, aircon_id, name
-                    )
-                    day_switches.extend(new_day_switches)
-                    async_add_entities(new_day_switches)
-                    iqe_days_added = True
-                    logger.debug("Added %d IQe weekday switches", len(new_day_switches))
-            for day_switch in day_switches:
-                set_iqe_entity_visibility(hass, day_switch, enabled)
-
-        config_entry.async_on_unload(
-            coordinator.async_add_listener(_add_iqe_settings_when_enabled)
-        )
+        logger.debug("No switch entities created; hub reports neither QTemp nor IQe")
 
 
 class MyPlaceIQQTempSwitch(CoordinatorEntity, SwitchEntity):
@@ -246,7 +210,7 @@ class MyPlaceIQQTempSwitch(CoordinatorEntity, SwitchEntity):
         """Return device information - attach to the parent aircon device."""
         return {
             "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}")},
-            "name": f"Aircon {self._name}",
+            "name": aircon_device_name(self._name),
             "manufacturer": "MyPlaceIQ",
             "model": "Aircon",
         }
@@ -296,6 +260,7 @@ class MyPlaceIQIQeEnabledDaySwitch(MyPlaceIQEnergySettingsEntity, SwitchEntity):
 
     _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:calendar-week"
+    _iqe_managed_visibility = True
 
     def __init__(self, coordinator, myplaceiq, config_entry, aircon_id, aircon_name,
                  index, key, label):
@@ -305,7 +270,6 @@ class MyPlaceIQIQeEnabledDaySwitch(MyPlaceIQEnergySettingsEntity, SwitchEntity):
         self._attr_unique_id = f"{config_entry.entry_id}_hub_iqe_enabled_day_{key}"
         self._attr_has_entity_name = True
         self._attr_name = f"HVAC IQe Active {label}"
-        self._attr_entity_registry_visible_default = iqe_enabled(self._load_body())
 
     @property
     def is_on(self):

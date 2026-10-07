@@ -143,11 +143,15 @@ class MyPlaceIQDataUpdateCoordinator(DataUpdateCoordinator):
                 raise UpdateFailed("Incomplete response and no valid cached data")
 
             # Log summary instead of full response
-            aircon = body.get("aircons", {}).get("019469", {})
-            logger.debug("Poll completed in %.3f seconds: aircon 019469 isOn=%s, mode=%s, zones=%d",
+            aircons = body.get("aircons", {})
+            logger.debug("Poll completed in %.3f seconds: %d aircon(s) [%s], zones=%d",
                          time.time() - start_time,
-                         aircon.get("isOn", "missing"),
-                         aircon.get("mode", "missing"),
+                         len(aircons),
+                         ", ".join(
+                             f"{aircon_id}: isOn={aircon.get('isOn', 'missing')}, "
+                             f"mode={aircon.get('mode', 'missing')}"
+                             for aircon_id, aircon in aircons.items()
+                         ),
                          len(body.get("zones", {})))
 
             # GetFullDataEvent replies are always complete snapshots - this

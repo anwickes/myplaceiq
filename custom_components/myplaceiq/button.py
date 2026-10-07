@@ -4,7 +4,7 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DOMAIN
+from .const import DOMAIN, aircon_device_name, zone_device_name
 
 logger = logging.getLogger(__name__)
 
@@ -214,7 +214,7 @@ class MyPlaceIQButton(ButtonEntity):
 
     async def async_press(self):
         """Handle button press for AC or zone commands."""
-        logger.debug("Button pressed: %s", self._attr_name)
+        logger.debug("Button pressed: %s", self._attr_unique_id)
         try:
             data = self.coordinator.data
             if not isinstance(data, dict) or not data or "body" not in data:
@@ -310,7 +310,10 @@ class MyPlaceIQButton(ButtonEntity):
         device_info = {
             "identifiers": 
                 {(DOMAIN, f"{self._config_entry.entry_id}_{'zone' if self._is_zone else 'aircon'}_{self._entity_id}")}, # pylint: disable=line-too-long
-            "name": f"{'Zone' if self._is_zone else 'Aircon'} {self._name}",
+            "name": (
+                zone_device_name(self._name) if self._is_zone
+                else aircon_device_name(self._name)
+            ),
             "manufacturer": "MyPlaceIQ",
             "model": "Zone" if self._is_zone else "Aircon"
         }

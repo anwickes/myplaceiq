@@ -8,7 +8,7 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN
+from .const import DOMAIN, aircon_device_name, zone_device_name
 
 logger = logging.getLogger(__name__)
 
@@ -116,8 +116,10 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
         self._aircon_id = aircon_id if is_zone else entity_id
         self._name = entity_data.get("name", "Zone" if is_zone else "Aircon")
         self._attr_unique_id = f"{config_entry.entry_id}_{'zone' if is_zone else 'aircon'}_{entity_id}_climate" # pylint: disable=line-too-long
+        # The climate entity is the main feature of its zone/aircon device, so
+        # it takes the device's name ("Zone Living") rather than repeating it.
         self._attr_has_entity_name = True
-        self._attr_name = "HVAC Climate"
+        self._attr_name = None
         self._attr_icon = "mdi:thermostat"
         self._attr_hvac_modes = (
             [HVACMode.AUTO, HVACMode.OFF] if is_zone else
@@ -181,7 +183,10 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
         """Return device information."""
         device_info = {
             "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_{'zone' if self._is_zone else 'aircon'}_{self._entity_id}")}, # pylint: disable=line-too-long
-            "name": f"{'Zone' if self._is_zone else 'Aircon'} {self._name}",
+            "name": (
+                zone_device_name(self._name) if self._is_zone
+                else aircon_device_name(self._name)
+            ),
             "manufacturer": "MyPlaceIQ",
             "model": "Zone" if self._is_zone else "Aircon"
         }
@@ -375,7 +380,7 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
         # Optimistic update
         body["aircons"][self._entity_id] = aircon
         self.coordinator.data["body"] = json.dumps(body)
-        logger.debug("Optimistic update for %s: set fan_mode to %s", self._attr_name, fan_mode)
+        logger.debug("Optimistic update for %s: set fan_mode to %s", self._attr_unique_id, fan_mode)
         self.async_write_ha_state()
 
         for command in commands:
@@ -420,7 +425,7 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
             body["aircons"][self._entity_id] = target
         self.coordinator.data["body"] = json.dumps(body)
         logger.debug("Optimistic update for %s: set temperature to %s",
-            self._attr_name, temperature)
+            self._attr_unique_id, temperature)
         self.async_write_ha_state()
 
         await self._myplaceiq.send_command(command)
@@ -494,7 +499,7 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
 
         self.coordinator.data["body"] = json.dumps(body)
         logger.debug("Optimistic update for %s: set hvac_mode to %s, isOn=%s",
-                     self._attr_name, hvac_mode, self._last_known_is_on)
+                     self._attr_unique_id, hvac_mode, self._last_known_is_on)
         self.async_write_ha_state()
 
         await self._myplaceiq.send_command(command)
@@ -528,7 +533,7 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
         body["zones"][self._entity_id] = zone
         self.coordinator.data["body"] = json.dumps(body)
         logger.debug("Optimistic update for %s: set preset_mode to %s (isPriorityZone=%s)",
-                     self._attr_name, preset_mode, new_priority)
+                     self._attr_unique_id, preset_mode, new_priority)
         self.async_write_ha_state()
 
         await self._myplaceiq.send_command(command)

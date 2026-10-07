@@ -3,7 +3,7 @@ import logging
 import time
 from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN
+from .const import DOMAIN, aircon_device_name, zone_device_name
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +117,7 @@ class MyPlaceIQAirconStateBinarySensor(CoordinatorEntity, BinarySensorEntity):
         """Return device information."""
         return {
             "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}")},
-            "name": f"Aircon {self._name}",
+            "name": aircon_device_name(self._name),
             "manufacturer": "MyPlaceIQ",
             "model": "Aircon",
         }
@@ -163,7 +163,7 @@ class MyPlaceIQZoneStateBinarySensor(CoordinatorEntity, BinarySensorEntity):
         """Return device information."""
         return {
             "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_zone_{self._zone_id}")},
-            "name": f"Zone {self._name}",
+            "name": zone_device_name(self._name),
             "manufacturer": "MyPlaceIQ",
             "model": "Zone",
             "via_device": (DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}"),
@@ -212,7 +212,7 @@ class MyPlaceIQZonePriorityBinarySensor(CoordinatorEntity, BinarySensorEntity):
         """Return device information — attach to the zone device."""
         return {
             "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_zone_{self._zone_id}")},
-            "name": f"Zone {self._name}",
+            "name": zone_device_name(self._name),
             "manufacturer": "MyPlaceIQ",
             "model": "Zone",
             "via_device": (DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}"),
