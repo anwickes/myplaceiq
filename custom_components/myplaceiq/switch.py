@@ -7,6 +7,13 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
+from .energy_settings import (
+    MyPlaceIQEnergySettingsEntity,
+    iqe_aircon_id,
+    iqe_enabled,
+    iqe_supported,
+    set_iqe_entity_visibility,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +26,54 @@ logger = logging.getLogger(__name__)
 # The official app presents this as a single "Enable QTemp" toggle.
 ZONE_OPERATION_QTEMP = "qTemp"
 ZONE_OPERATION_PRIORITY = "priority"
+
+# IQe switches: (key, name, energySettings field). Whether IQe may
+# automatically cool/heat using excess energy - the wizard's two toggles.
+IQE_SWITCHES = (
+    ("auto_cooling", "Auto Cooling", "smartAirCoolOn"),
+    ("auto_heating", "Auto Heating", "smartAirHeatOn"),
+)
+
+IQE_WEEKDAYS = (
+    ("sunday", "Sunday"),
+    ("monday", "Monday"),
+    ("tuesday", "Tuesday"),
+    ("wednesday", "Wednesday"),
+    ("thursday", "Thursday"),
+    ("friday", "Friday"),
+    ("saturday", "Saturday"),
+)
+
+
+def _iqe_switches(coordinator, myplaceiq, config_entry, body):
+    """Return IQe enable switches and, while enabled, its other controls."""
+    if not iqe_supported(body):
+        return []
+    aircon_id = iqe_aircon_id(body)
+    if aircon_id is None:
+        return []
+    name = body["aircons"][aircon_id].get("name", "Aircon")
+    entities = [
+        MyPlaceIQIQeSwitch(
+            coordinator, myplaceiq, config_entry, aircon_id, name, key, label, field
+        )
+        for key, label, field in IQE_SWITCHES
+    ]
+    if iqe_enabled(body):
+        entities.extend(_iqe_enabled_day_switches(
+            coordinator, myplaceiq, config_entry, aircon_id, name
+        ))
+    return entities
+
+
+def _iqe_enabled_day_switches(coordinator, myplaceiq, config_entry, aircon_id, name):
+    """Create weekday switches for an enabled IQe configuration."""
+    return [
+        MyPlaceIQIQeEnabledDaySwitch(
+            coordinator, myplaceiq, config_entry, aircon_id, name, index, key, label
+        )
+        for index, (key, label) in enumerate(IQE_WEEKDAYS)
+    ]
 
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
@@ -49,11 +104,45 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 )
             )
 
+    entities.extend(_iqe_switches(coordinator, myplaceiq, config_entry, body))
+
     if entities:
         async_add_entities(entities)
         logger.debug("Added %d switch entities", len(entities))
     else:
         logger.debug("No switch entities created; hub reports no zoneOperation setting")
+
+    day_switches = [
+        entity for entity in entities
+        if isinstance(entity, MyPlaceIQIQeEnabledDaySwitch)
+    ]
+    if iqe_supported(body):
+        iqe_days_added = bool(day_switches)
+        def _add_iqe_settings_when_enabled():
+            nonlocal body, iqe_days_added
+            try:
+                body = json.loads(coordinator.data["body"])
+            except (KeyError, TypeError, ValueError) as err:
+                logger.error("Failed to parse coordinator data for IQe switches: %s", err)
+                return
+            enabled = iqe_enabled(body)
+            if enabled and not iqe_days_added:
+                aircon_id = iqe_aircon_id(body)
+                if aircon_id is not None:
+                    name = body["aircons"][aircon_id].get("name", "Aircon")
+                    new_day_switches = _iqe_enabled_day_switches(
+                        coordinator, myplaceiq, config_entry, aircon_id, name
+                    )
+                    day_switches.extend(new_day_switches)
+                    async_add_entities(new_day_switches)
+                    iqe_days_added = True
+                    logger.debug("Added %d IQe weekday switches", len(new_day_switches))
+            for day_switch in day_switches:
+                set_iqe_entity_visibility(hass, day_switch, enabled)
+
+        config_entry.async_on_unload(
+            coordinator.async_add_listener(_add_iqe_settings_when_enabled)
+        )
 
 
 class MyPlaceIQQTempSwitch(CoordinatorEntity, SwitchEntity):
@@ -70,7 +159,8 @@ class MyPlaceIQQTempSwitch(CoordinatorEntity, SwitchEntity):
         self._aircon_id = aircon_id
         self._name = aircon_data.get("name", "Aircon")
         self._attr_unique_id = f"{config_entry.entry_id}_aircon_{aircon_id}_qtemp"
-        self._attr_name = f"{self._name}_qtemp".replace(" ", "_").lower()
+        self._attr_has_entity_name = True
+        self._attr_name = "HVAC QTemp"
         self._attr_icon = "mdi:thermometer-auto"
 
     def _load_body(self) -> dict:
@@ -160,3 +250,96 @@ class MyPlaceIQQTempSwitch(CoordinatorEntity, SwitchEntity):
             "manufacturer": "MyPlaceIQ",
             "model": "Aircon",
         }
+
+
+class MyPlaceIQIQeSwitch(MyPlaceIQEnergySettingsEntity, SwitchEntity):
+    # pylint: disable=too-many-instance-attributes
+    """Allow IQe to automatically cool or heat using excess energy."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator, myplaceiq, config_entry, aircon_id, aircon_name,
+                 key, label, field):
+        # pylint: disable=too-many-arguments, too-many-positional-arguments
+        super().__init__(coordinator, myplaceiq, config_entry, aircon_id, aircon_name)
+        self._field = field
+        self._attr_unique_id = f"{config_entry.entry_id}_hub_iqe_{key}"
+        self._attr_has_entity_name = True
+        self._attr_name = f"HVAC IQe {label}"
+        self._attr_icon = (
+            "mdi:snowflake-thermometer" if field == "smartAirCoolOn" else "mdi:sun-thermometer"
+        )
+
+    @property
+    def is_on(self):
+        """Return whether IQe may automatically run in this direction."""
+        settings = self._energy_settings()
+        if not settings or self._field not in settings:
+            return None
+        return bool(settings[self._field])
+
+    async def async_turn_on(self, **_kwargs) -> None:
+        """Allow IQe to run automatically."""
+        await self._async_update_energy_settings(
+            lambda settings: settings.__setitem__(self._field, True)
+        )
+
+    async def async_turn_off(self, **_kwargs) -> None:
+        """Stop IQe running automatically."""
+        await self._async_update_energy_settings(
+            lambda settings: settings.__setitem__(self._field, False)
+        )
+
+
+class MyPlaceIQIQeEnabledDaySwitch(MyPlaceIQEnergySettingsEntity, SwitchEntity):
+    """Enable or disable IQe for one day of the week."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:calendar-week"
+
+    def __init__(self, coordinator, myplaceiq, config_entry, aircon_id, aircon_name,
+                 index, key, label):
+        # pylint: disable=too-many-arguments, too-many-positional-arguments
+        super().__init__(coordinator, myplaceiq, config_entry, aircon_id, aircon_name)
+        self._index = index
+        self._attr_unique_id = f"{config_entry.entry_id}_hub_iqe_enabled_day_{key}"
+        self._attr_has_entity_name = True
+        self._attr_name = f"HVAC IQe Active {label}"
+        self._attr_entity_registry_visible_default = iqe_enabled(self._load_body())
+
+    @property
+    def is_on(self):
+        """Return whether IQe is enabled for this weekday."""
+        settings = self._energy_settings()
+        days = settings.get("smartAirEnabledDays") if settings else None
+        if (
+            not isinstance(days, list)
+            or len(days) != len(IQE_WEEKDAYS)
+            or any(not isinstance(day, bool) for day in days)
+        ):
+            return None
+        return days[self._index]
+
+    async def async_turn_on(self, **_kwargs) -> None:
+        """Enable IQe for this weekday, preserving the other days."""
+        await self._async_set_enabled(True)
+
+    async def async_turn_off(self, **_kwargs) -> None:
+        """Disable IQe for this weekday, preserving the other days."""
+        await self._async_set_enabled(False)
+
+    async def _async_set_enabled(self, enabled):
+        """Update one weekday only when the hub's weekday array is valid."""
+        def update_day(settings):
+            days = settings.get("smartAirEnabledDays")
+            if (
+                not isinstance(days, list)
+                or len(days) != len(IQE_WEEKDAYS)
+                or any(not isinstance(day, bool) for day in days)
+            ):
+                raise HomeAssistantError(
+                    "Cannot update IQe weekday: expected seven boolean values"
+                )
+            days[self._index] = enabled
+
+        await self._async_update_energy_settings(update_day)

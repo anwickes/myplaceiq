@@ -15,7 +15,15 @@ from .myplaceiq import MyPlaceIQ
 
 logger = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor", "binary_sensor", "button", "climate", "switch"]
+PLATFORMS = [
+    "sensor",
+    "binary_sensor",
+    "button",
+    "climate",
+    "number",
+    "select",
+    "switch",
+]
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool: # pylint: disable=unused-argument
     """Set up the MyPlaceIQ integration."""

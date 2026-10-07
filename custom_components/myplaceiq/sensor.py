@@ -4,7 +4,13 @@ import time  # Added import
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.const import UnitOfTemperature
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from datetime import datetime, timezone
 from .const import DOMAIN
+from .energy_settings import (
+    iqe_enabled,
+    iqe_supported,
+    set_iqe_entity_visibility,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +59,39 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             ),
         ])
 
+    iqe_status_entities = []
+    iqe_status_added = False
+    if iqe_enabled(body):
+        iqe_status_entities = _iqe_status_sensors(
+            coordinator, config_entry, aircons
+        )
+        entities.extend(iqe_status_entities)
+        iqe_status_added = bool(iqe_status_entities)
+    if iqe_supported(body):
+        def _add_status_when_enabled():
+            nonlocal iqe_status_added
+            try:
+                updated_body = json.loads(coordinator.data["body"])
+            except (KeyError, TypeError, ValueError) as err:
+                logger.error("Failed to parse coordinator data for IQe status: %s", err)
+                return
+            enabled = iqe_enabled(updated_body)
+            if enabled and not iqe_status_added:
+                status_sensors = _iqe_status_sensors(
+                    coordinator, config_entry, updated_body.get("aircons", {})
+                )
+                if status_sensors:
+                    iqe_status_entities.extend(status_sensors)
+                    async_add_entities(status_sensors)
+                    iqe_status_added = True
+                    logger.debug("Added %d IQe status sensors", len(status_sensors))
+            for status_sensor in iqe_status_entities:
+                set_iqe_entity_visibility(hass, status_sensor, enabled)
+
+        config_entry.async_on_unload(
+            coordinator.async_add_listener(_add_status_when_enabled)
+        )
+
     # Zone Sensors (Temperature and State)
     for aircon_id, aircon_data in aircons.items():
         for zone_id in aircon_data.get("zoneOrder", []):
@@ -74,6 +113,16 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     else:
         logger.warning("No sensor entities created; check data structure")
 
+
+def _iqe_status_sensors(coordinator, config_entry, aircons):
+    """Build IQe status sensors for aircons that report IQe status."""
+    return [
+        MyPlaceIQIQeStatusSensor(coordinator, config_entry, aircon_id, aircon_data)
+        for aircon_id, aircon_data in aircons.items()
+        if "smartAirInfo" in aircon_data
+    ]
+
+
 class MyPlaceIQAirconSensor(CoordinatorEntity, SensorEntity):
     # pylint: disable=too-many-instance-attributes
     """Sensor for MyPlaceIQ AC system mode."""
@@ -84,7 +133,8 @@ class MyPlaceIQAirconSensor(CoordinatorEntity, SensorEntity):
         self._config_entry = config_entry
         self._name = aircon_data.get("name", "Aircon")
         self._attr_unique_id = f"{config_entry.entry_id}_aircon_{aircon_id}_mode"
-        self._attr_name = f"{self._name}_mode".replace(" ", "_").lower()
+        self._attr_has_entity_name = True
+        self._attr_name = "HVAC Mode"
         self._attr_icon = "mdi:air-conditioner"
         self._attr_device_class = None
         self._attr_state_class = None
@@ -212,6 +262,82 @@ class MyPlaceIQActiveControlZoneSensor(CoordinatorEntity, SensorEntity):
             "model": "Aircon",
         }
 
+def _epoch_ms_to_datetime(value):
+    """Convert the hub's epoch-millisecond timestamps (0 = unset) to an aware datetime."""
+    if not value:
+        return None
+    return datetime.fromtimestamp(value / 1000, tz=timezone.utc)
+
+
+class MyPlaceIQIQeStatusSensor(CoordinatorEntity, SensorEntity):
+    # pylint: disable=too-many-instance-attributes
+    """What IQe is doing or planning to do for an aircon.
+
+    State is the hub's run status (e.g. "none", "scheduled"). The attributes
+    carry the planned action and when it starts and stops, plus the
+    IQe configuration. Enabled weekdays can be changed from Home Assistant;
+    usage mode remains read-only.
+    """
+
+    def __init__(self, coordinator, config_entry, aircon_id, aircon_data):
+        super().__init__(coordinator)
+        self._aircon_id = aircon_id
+        self._config_entry = config_entry
+        self._name = aircon_data.get("name", "Aircon")
+        self._attr_unique_id = f"{config_entry.entry_id}_aircon_{aircon_id}_iqe_status"
+        self._attr_name = "IQe Status"
+        self._attr_icon = "mdi:solar-power-variant"
+        self._attr_entity_registry_visible_default = iqe_enabled(
+            json.loads(coordinator.data["body"])
+        )
+
+    def _get_data(self):
+        """Return (smartAirInfo, energySettings) or (None, None)."""
+        data = self.coordinator.data
+        if not isinstance(data, dict) or not data or "body" not in data:
+            return None, None
+        try:
+            body = json.loads(data["body"])
+        except (json.JSONDecodeError, TypeError) as err:
+            logger.error("Failed to parse coordinator data for IQe status %s: %s",
+                         self._aircon_id, err)
+            return None, None
+        info = body.get("aircons", {}).get(self._aircon_id, {}).get("smartAirInfo")
+        return info, body.get("energySettings", {})
+
+    @property
+    def state(self):
+        """Return the hub's IQe run status."""
+        info, _ = self._get_data()
+        return info.get("smartAirRunStatus") if info else None
+
+    @property
+    def extra_state_attributes(self):
+        """Return the planned action, its schedule and the read-only IQe settings."""
+        info, settings = self._get_data()
+        if not info:
+            return {}
+        return {
+            "planned_action": info.get("smartAirPlannedAction"),
+            "is_active": info.get("isSmartAirActive"),
+            "type": info.get("smartAirType"),
+            "start": _epoch_ms_to_datetime(info.get("smartAirStartEpochUtc")),
+            "stop": _epoch_ms_to_datetime(info.get("smartAirStopEpochUtc")),
+            "house_power_source": info.get("housePowerSource", []),
+            "usage_mode": settings.get("smartAirUsageMode"),
+            "enabled_days": settings.get("smartAirEnabledDays"),
+        }
+
+    @property
+    def device_info(self):
+        """Return device information - attach to the parent aircon device."""
+        return {
+            "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}")},
+            "name": f"Aircon {self._name}",
+            "manufacturer": "MyPlaceIQ",
+            "model": "Aircon",
+        }
+
 class MyPlaceIQPriorityZoneSensor(CoordinatorEntity, SensorEntity):
     # pylint: disable=too-many-instance-attributes
     """Sensor reporting how many priority zones are currently active for an aircon system.
@@ -304,7 +430,8 @@ class MyPlaceIQZoneSensor(CoordinatorEntity, SensorEntity):
         self._config_entry = config_entry
         self._name = zone_data.get("name", "Zone")
         self._attr_unique_id = f"{config_entry.entry_id}_zone_{zone_id}_temperature"
-        self._attr_name = f"{self._name}_temperature".replace(" ", "_").lower()
+        self._attr_has_entity_name = True
+        self._attr_name = "HVAC Temperature"
         self._attr_icon = "mdi:thermostat"
         self._attr_device_class = SensorDeviceClass.TEMPERATURE
         self._attr_state_class = SensorStateClass.MEASUREMENT
@@ -367,4 +494,3 @@ class MyPlaceIQZoneSensor(CoordinatorEntity, SensorEntity):
             "model": "Zone",
             "via_device": (DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}")
         }
-

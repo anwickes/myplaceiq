@@ -162,7 +162,8 @@ class MyPlaceIQButton(ButtonEntity):
         self._aircon_id = aircon_id if is_zone else entity_id
         self._name = entity_data.get("name", f"{'Zone' if is_zone else 'Aircon'}")
         self._attr_unique_id = f"{config_entry.entry_id}_{'zone' if is_zone else 'aircon'}_{entity_id}_{action}" # pylint: disable=line-too-long
-        self._attr_name = f"{self._name}_{action}".replace(" ", "_").lower()
+        self._attr_has_entity_name = True
+        self._attr_name = f"HVAC {self._action.replace('_', ' ').title()}"
         self._attr_icon = self._resolve_icon(action, is_zone)
         self._attr_entity_category = EntityCategory.CONFIG
 

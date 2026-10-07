@@ -116,7 +116,8 @@ class MyPlaceIQClimate(CoordinatorEntity, ClimateEntity):
         self._aircon_id = aircon_id if is_zone else entity_id
         self._name = entity_data.get("name", "Zone" if is_zone else "Aircon")
         self._attr_unique_id = f"{config_entry.entry_id}_{'zone' if is_zone else 'aircon'}_{entity_id}_climate" # pylint: disable=line-too-long
-        self._attr_name = f"{self._name}_climate".replace(" ", "_").lower()
+        self._attr_has_entity_name = True
+        self._attr_name = "HVAC Climate"
         self._attr_icon = "mdi:thermostat"
         self._attr_hvac_modes = (
             [HVACMode.AUTO, HVACMode.OFF] if is_zone else

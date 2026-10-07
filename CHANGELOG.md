@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - QTemp support. A new `switch` entity per aircon (`switch.<aircon>_qtemp`) turns QTemp on or off, matching the "Enable QTemp" toggle in the official app. With QTemp on, the controller itself picks the zone that most needs heating or cooling; off returns to manual priority zones. Sent as `SetAirconSettings` with the aircon's complete `airconSettings` object and only `zoneOperation` changed, exactly as the official app does.
 - A new "Active Control Zone" sensor per aircon, reporting which zone is currently driving the system (from `activeControlZoneName`). Under QTemp this changes automatically; its attributes show the `zone_operation` in force and the `zone_id`.
 
+- IQe support (the controller's "run the aircon from excess solar / free electricity hours" feature), on controllers that report it. The setup wizard's answers are now available as entities, written with `SetEnergySettings` using the hub's complete `energySettings` object with only the changed field altered, as the official app does:
+  - `switch.<aircon>_iqe_auto_cooling` and `switch.<aircon>_iqe_auto_heating` - allow IQe to cool or heat automatically.
+  - `number` entities for solar panel capacity (kW), inverter capacity (kW), household power use without air conditioning (kW), each aircon's running current (A, converted at the app's fixed 240 V) and the outdoor-temperature triggers for cooling (above) and heating (below).
+  - `sensor.iqe_status` per aircon: IQe's run status, with the planned action, its start and stop time, the power source and the (read-only) usage mode and active days as attributes.
+  - `select.<aircon>_iqe_free_electricity_hours` - choose None, 11 am to 2 pm, or 12 pm to 3 pm.
+  - Solar panel capacity is available as a number; setting it to 0 matches the app's captured solar-off state. There is no separate solar switch.
+
 ### Changed
 - While QTemp is active the controller disables manual priority selection, so the zone climate entities now hide the `Priority` preset until priority mode is selected again (previously the preset was fixed at startup). The `toggle_priority` buttons are created in either mode, and pressing one while QTemp is active raises a clear error instead of sending a command the controller will not honour.
 

@@ -52,6 +52,7 @@ The MyPlaceIQ integration allows Home Assistant to communicate with a MyPlaceIQ 
   - Example: `button.main_bedroom_toggle`
 - **Switch**: Turn QTemp on or off. With QTemp on, the controller picks the zone that most needs heating or cooling and manual priority is disabled; with it off you choose the priority zone yourself (zone Priority preset or `*_toggle_priority` buttons). Only created on controllers that report the setting.
   - Example: `switch.aircon_qtemp`
+- **IQe** (controllers that offer it): Auto Cooling and Auto Heating switches (`switch.aircon_iqe_auto_cooling`, `switch.aircon_iqe_auto_heating`) become available. Weekday switches, configuration numbers and `sensor.iqe_status` are hidden when both modes are off, and shown when either is enabled. The cooling and heating trigger numbers are shown only while their corresponding mode is enabled. The free-electricity period selector offers **None**, **11 am to 2 pm**, and **12 pm to 3 pm** while IQe is enabled. Solar capacity is configured with the Solar Panel number; setting it to 0 matches the app's captured solar-off state.
 - **Active Control Zone sensor**: The zone currently driving the aircon. Changes automatically under QTemp.
   - Example: `sensor.active_control_zone`
 

@@ -87,6 +87,7 @@ class MyPlaceIQAirconStateBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._name = aircon_data.get("name", "Aircon")
         self._last_known_is_on = None
         self._attr_unique_id = f"{config_entry.entry_id}_aircon_{aircon_id}_state"
+        self._attr_has_entity_name = True
         self._attr_name = "HVAC State"
         self._attr_device_class = BinarySensorDeviceClass.POWER
         self._attr_icon = "mdi:power"
@@ -135,7 +136,8 @@ class MyPlaceIQZoneStateBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._config_entry = config_entry
         self._name = zone_data.get("name", "Zone")
         self._attr_unique_id = f"{config_entry.entry_id}_zone_{zone_id}_state"
-        self._attr_name = f"{self._name}_state".replace(" ", "_").lower()
+        self._attr_has_entity_name = True
+        self._attr_name = "HVAC State"
         self._attr_device_class = BinarySensorDeviceClass.POWER
         self._attr_icon = "mdi:toggle-switch"
 
@@ -181,7 +183,8 @@ class MyPlaceIQZonePriorityBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._config_entry = config_entry
         self._name = zone_data.get("name", "Zone")
         self._attr_unique_id = f"{config_entry.entry_id}_zone_{zone_id}_priority"
-        self._attr_name = f"{self._name}_priority".replace(" ", "_").lower()
+        self._attr_has_entity_name = True
+        self._attr_name = "HVAC Priority"
 
     @property
     def is_on(self):
