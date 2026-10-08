@@ -4,7 +4,7 @@ import logging
 import math
 from math import isfinite
 from homeassistant.core import callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -158,12 +158,13 @@ def _positive(value) -> bool:
 
 
 def iqe_missing_requirements(settings: dict):
-    """Return why IQe cannot be turned on yet, or None if it can.
+    """Return what IQe is missing to run from, or None if it has enough.
 
     IQe needs something to run from: solar generation (both the solar panel
     and the inverter capacity above 0) or a free electricity period. The
     entities that supply these are the Solar Panel and Inverter Capacity
-    numbers and the Free Electricity Hours select.
+    numbers and the Free Electricity Hours select. The text returned
+    completes the sentence "IQe needs ...".
     """
     if free_electricity_enabled(settings) is True:
         return None
@@ -178,8 +179,8 @@ def iqe_missing_requirements(settings: dict):
     if not missing:
         return None
     return (
-        "IQe cannot be turned on yet: it needs solar panel and inverter capacity "
-        f"above 0 (still missing: {', '.join(missing)}) or free electricity hours"
+        "solar panel and inverter capacity above 0 "
+        f"(still missing: {', '.join(missing)}) or free electricity hours"
     )
 
 
@@ -246,7 +247,19 @@ class MyPlaceIQEnergySettingsEntity(CoordinatorEntity):
         settings = copy.deepcopy(self._load_body().get("energySettings"))
         if not settings:
             raise HomeAssistantError("No energySettings known; cannot change IQe settings")
+        # IQe must never be left on with nothing to run from. Refuse a change
+        # that would do that. (If the settings were already in that state, for
+        # example because the app left them so, any change is allowed, so it
+        # can be put right or turned off.)
+        was_runnable = iqe_missing_requirements(settings) is None
         mutator(settings)
+        if was_runnable and (settings.get("smartAirCoolOn") or settings.get("smartAirHeatOn")):
+            missing = iqe_missing_requirements(settings)
+            if missing:
+                raise ServiceValidationError(
+                    "This change would leave IQe with nothing to run from: it needs "
+                    f"{missing}. Turn off Auto Cooling and Auto Heating first."
+                )
 
         command = {
             "commands": [{

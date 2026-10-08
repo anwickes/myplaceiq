@@ -247,9 +247,11 @@ class MyPlaceIQIQeSwitch(MyPlaceIQEnergySettingsEntity, SwitchEntity):
         """Allow IQe to run automatically, once it has something to run from."""
         def _enable(settings):
             if settings.get(self._field) is not True:
-                problem = iqe_missing_requirements(settings)
-                if problem:
-                    raise ServiceValidationError(problem)
+                missing = iqe_missing_requirements(settings)
+                if missing:
+                    raise ServiceValidationError(
+                        f"IQe cannot be turned on yet: it needs {missing}"
+                    )
             settings[self._field] = True
 
         await self._async_update_energy_settings(_enable)
