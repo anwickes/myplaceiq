@@ -48,7 +48,6 @@ class MyPlaceIQIQeFreeElectricityPeriod(MyPlaceIQEnergySettingsEntity, SelectEnt
 
     _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:clock-outline"
-    _iqe_managed_visibility = True
     _attr_options = [
         FREE_ELECTRICITY_NONE,
         *(period[0] for period in FREE_ELECTRICITY_PERIODS),

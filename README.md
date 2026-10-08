@@ -4,19 +4,19 @@
 The MyPlaceIQ integration allows Home Assistant to communicate with a MyPlaceIQ HVAC hub, enabling control and monitoring of heating, ventilation, and air conditioning systems. This integration connects to the hub via a WebSocket connection, providing real-time state updates and control capabilities for devices like Rinnai HVAC units.
 
 ## Features
-- **Sensors**: Monitor the state of HVAC zones (e.g., `sensor.rumpus_state`, `sensor.main_bedroom_state`).
-- **Buttons**: Control zones with toggle buttons (e.g., `button.rumpus_toggle`, `button.main_bedroom_toggle`) with optimistic updates for instant feedback.
+- **Sensors**: Monitor the state of HVAC zones (e.g., `binary_sensor.zone_rumpus_hvac_state`, `binary_sensor.zone_main_bedroom_hvac_state`).
+- **Buttons**: Control zones with toggle buttons (e.g., `button.zone_rumpus_hvac_toggle`, `button.zone_main_bedroom_hvac_toggle`) with optimistic updates for instant feedback.
 - **Configuration**: Set up via the Home Assistant UI with support for host, port, client ID, client secret, and polling interval.
 - **Options Flow**: Update all configuration fields (host, port, client ID, client secret, polling interval) via the integration settings.
 
 ## Thermostat Integration
 - **Climate Entities**: Use `climate` entities with Home Assistant’s built-in thermostat card or `simple-thermostat` (via HACS) to control temperatures and modes.
-  - Zones (e.g., `climate.main_bedroom_climate`): Control temperature (16–30°C) and on/off state. Zones inherit the system’s mode (`heat`, `cool`, `dry`, `fan`).
-  - Main System (e.g., `climate.myplaceiq_system`): Control temperature and modes (`heat`, `cool`, `dry`, `fan`, `off`).
+  - Zones (e.g., `climate.zone_main_bedroom`): Control temperature (16–30°C) and on/off state. Zones inherit the system’s mode (`heat`, `cool`, `dry`, `fan`).
+  - Main System (e.g., `climate.aircon`): Control temperature and modes (`heat`, `cool`, `dry`, `fan`, `off`).
 - **Lovelace Configuration**:
   ```yaml
   type: thermostat
-  entity: climate.main_bedroom_climate
+  entity: climate.zone_main_bedroom
 
 ## Installation
 
@@ -46,15 +46,20 @@ The MyPlaceIQ integration allows Home Assistant to communicate with a MyPlaceIQ 
 5. Use the **Options** flow (cog icon) to update settings later.
 
 ## Entities
-- **Sensors**: Display HVAC zone states (e.g., `on`, `off`).
-  - Example: `sensor.main_bedroom_state`
+Entity IDs below are what a new installation generates from the device names (`Zone <zone name>` and `Aircon <aircon name>`; an aircon already called "Aircon" is just "Aircon"). If you upgraded from an earlier version your existing entity IDs are unchanged.
+- **Zone state**: Whether each zone is on or off.
+  - Example: `binary_sensor.zone_main_bedroom_hvac_state`
 - **Buttons**: Toggle HVAC zones with optimistic updates.
-  - Example: `button.main_bedroom_toggle`
-- **Switch**: Turn QTemp on or off. With QTemp on, the controller picks the zone that most needs heating or cooling and manual priority is disabled; with it off you choose the priority zone yourself (zone Priority preset or `*_toggle_priority` buttons). Only created on controllers that report the setting.
-  - Example: `switch.aircon_qtemp`
-- **IQe** (controllers that offer it): Auto Cooling and Auto Heating switches (`switch.aircon_iqe_auto_cooling`, `switch.aircon_iqe_auto_heating`) become available. Weekday switches, configuration numbers and `sensor.iqe_status` are hidden when both modes are off, and shown when either is enabled. The cooling and heating trigger numbers are shown only while their corresponding mode is enabled. The free-electricity period selector offers **None**, **11 am to 2 pm**, and **12 pm to 3 pm** while IQe is enabled. Solar capacity is configured with the Solar Panel number; setting it to 0 matches the app's captured solar-off state.
-- **Active Control Zone sensor**: The zone currently driving the aircon. Changes automatically under QTemp.
-  - Example: `sensor.active_control_zone`
+  - Example: `button.zone_main_bedroom_hvac_toggle`
+- **QTemp switch**: Turn QTemp on or off. With QTemp on, the controller picks the zone that most needs heating or cooling and manual priority is disabled; with it off you choose the priority zone yourself (zone Priority preset or `*_toggle_priority` buttons). Only created on controllers that report the setting.
+  - Example: `switch.aircon_hvac_qtemp`
+- **Active Control Zone sensor**: The zone currently driving the aircon. Changes automatically under QTemp. Only created on controllers that report it.
+  - Example: `sensor.aircon_hvac_active_control_zone`
+- **IQe** (controllers that offer it): runs the aircon from excess solar or free electricity hours.
+  - Set it up with: the Solar Panel and Inverter Capacity numbers (`number.aircon_hvac_iqe_solar_panel`, `number.aircon_hvac_iqe_inverter_capacity`), Household Power Use and Running Current numbers, the free electricity hours select (`select.aircon_hvac_iqe_free_electricity_hours`: **None**, **11 am to 2 pm** or **12 pm to 3 pm**), and the weekday switches (`switch.aircon_hvac_iqe_active_monday`, ...).
+  - Turn it on with the Auto Cooling and Auto Heating switches (`switch.aircon_hvac_iqe_auto_cooling`, `switch.aircon_hvac_iqe_auto_heating`). **This lets the controller start your aircon by itself.** They refuse to turn on until IQe has something to run from: Solar Panel **and** Inverter Capacity above 0, **or** free electricity hours chosen. To turn solar off as the app does, set both the Solar Panel and Inverter Capacity numbers to 0.
+  - Shown only while IQe is running: the status and schedule sensors (`sensor.aircon_hvac_iqe_status`, `sensor.aircon_hvac_iqe_start`, `sensor.aircon_hvac_iqe_stop`), and each cooling/heating trigger number while its own mode is on. Hidden entities still exist and can be unhidden from the entity settings.
+  - Usage mode is shown as an attribute of the status sensor but cannot yet be changed here.
 
 ## Notes
 ### Host & Credential Retrieval

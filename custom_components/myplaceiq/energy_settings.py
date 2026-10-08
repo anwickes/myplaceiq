@@ -1,6 +1,7 @@
 import copy
 import json
 import logging
+import math
 from math import isfinite
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
@@ -146,6 +147,42 @@ def iqe_enabled(body: dict) -> bool:
     )
 
 
+def _positive(value) -> bool:
+    """Return True for a real number above zero (booleans and junk do not count)."""
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value > 0
+    )
+
+
+def iqe_missing_requirements(settings: dict):
+    """Return why IQe cannot be turned on yet, or None if it can.
+
+    IQe needs something to run from: solar generation (both the solar panel
+    and the inverter capacity above 0) or a free electricity period. The
+    entities that supply these are the Solar Panel and Inverter Capacity
+    numbers and the Free Electricity Hours select.
+    """
+    if free_electricity_enabled(settings) is True:
+        return None
+    missing = [
+        label
+        for label, field in (
+            ("Solar Panel", "solarPanelW"),
+            ("Inverter Capacity", "maxInverterPowerW"),
+        )
+        if not _positive(settings.get(field))
+    ]
+    if not missing:
+        return None
+    return (
+        "IQe cannot be turned on yet: it needs solar panel and inverter capacity "
+        f"above 0 (still missing: {', '.join(missing)}) or free electricity hours"
+    )
+
+
 def iqe_aircon_id(body: dict):
     """Return the id of the aircon IQe controls, or the first aircon as a fallback."""
     aircons = body.get("aircons", {})
@@ -165,12 +202,15 @@ class MyPlaceIQEnergySettingsEntity(CoordinatorEntity):
     others. The cache is updated synchronously before the command is sent,
     so two quick changes accumulate instead of overwriting each other.
 
-    Entities that only make sense while IQe is running set
+    Entities that only make sense while IQe is running (its status, the
+    planned start and stop, and the trigger for a mode that is on) set
     _iqe_managed_visibility and are hidden while it is not (see
-    _iqe_visible). They always exist, so nothing goes "unavailable" after a
-    restart. The integration only hides an entity at the moment IQe switches
-    off, and only unhides one it hid itself, so an entity the user unhides
-    is not re-hidden while IQe stays off.
+    _iqe_visible). Entities used to set IQe up are always shown, because IQe
+    cannot be turned on until they are filled in. All of them always exist,
+    so nothing goes "unavailable" after a restart. The integration only hides
+    an entity at the moment IQe switches off, and only unhides one it hid
+    itself, so an entity the user unhides is not re-hidden while IQe stays
+    off.
     """
 
     _iqe_managed_visibility = False
@@ -245,12 +285,17 @@ class MyPlaceIQEnergySettingsEntity(CoordinatorEntity):
 
     def _sync_iqe_visibility(self, startup: bool = False) -> None:
         """Hide or show this entity in the registry as IQe switches on and off."""
-        if not self._iqe_managed_visibility or self.hass is None or self.entity_id is None:
+        if self.hass is None or self.entity_id is None:
             return
-        try:
-            visible = self._iqe_visible(self._load_body())
-        except HomeAssistantError:
-            return
+        if self._iqe_managed_visibility:
+            try:
+                visible = self._iqe_visible(self._load_body())
+            except HomeAssistantError:
+                return
+        else:
+            # Always shown. Still unhide anything an earlier version of the
+            # integration hid, so it does not stay hidden for good.
+            visible = True
 
         registry = er.async_get(self.hass)
         entry = registry.async_get(self.entity_id)

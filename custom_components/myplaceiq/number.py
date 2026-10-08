@@ -16,7 +16,6 @@ from .energy_settings import (
     NOMINAL_VOLTAGE_V,
     MyPlaceIQEnergySettingsEntity,
     iqe_aircon_id,
-    iqe_enabled,
     iqe_supported,
 )
 
@@ -110,8 +109,9 @@ RUNNING_CURRENT_SPEC = NumberSpec(
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """Set up MyPlaceIQ number entities from a config entry.
 
-    The entities exist whenever the hub supports IQe. While IQe is not
-    running they are hidden (not removed).
+    The entities exist whenever the hub supports IQe. The trigger for a mode
+    that is off is hidden (not removed), so nothing turns "unavailable"
+    after a restart; see MyPlaceIQEnergySettingsEntity.
     """
     logger.debug("Setting up number entities for MyPlaceIQ")
     coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
@@ -163,7 +163,6 @@ class MyPlaceIQEnergyNumber(MyPlaceIQEnergySettingsEntity, NumberEntity):
 
     _attr_entity_category = EntityCategory.CONFIG
     _attr_mode = NumberMode.BOX
-    _iqe_managed_visibility = True
 
     def __init__(self, coordinator, myplaceiq, config_entry, aircon_id, aircon_name, spec):
         # pylint: disable=too-many-arguments, too-many-positional-arguments
@@ -180,12 +179,18 @@ class MyPlaceIQEnergyNumber(MyPlaceIQEnergySettingsEntity, NumberEntity):
         self._attr_native_max_value = spec.max_value
         self._attr_native_step = spec.step
 
+    @property
+    def _iqe_managed_visibility(self) -> bool:
+        """Only a trigger number is hidden, and only while its own mode is off.
+
+        The other numbers set IQe up, which has to happen before it can be
+        turned on, so they are always shown.
+        """
+        return self._spec.enabled_field is not None
+
     def _iqe_visible(self, body: dict) -> bool:
-        """Show while IQe runs, and for trigger numbers only while their mode is on."""
-        if not iqe_enabled(body):
-            return False
-        field = self._spec.enabled_field
-        return field is None or body.get("energySettings", {}).get(field) is True
+        """Show a trigger only while its mode is on."""
+        return body.get("energySettings", {}).get(self._spec.enabled_field) is True
 
     @property
     def native_value(self):

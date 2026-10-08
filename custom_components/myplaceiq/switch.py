@@ -3,13 +3,14 @@ import json
 import logging
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import EntityCategory
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, aircon_device_name
 from .energy_settings import (
     MyPlaceIQEnergySettingsEntity,
     iqe_aircon_id,
+    iqe_missing_requirements,
     iqe_supported,
 )
 
@@ -243,10 +244,15 @@ class MyPlaceIQIQeSwitch(MyPlaceIQEnergySettingsEntity, SwitchEntity):
         return bool(settings[self._field])
 
     async def async_turn_on(self, **_kwargs) -> None:
-        """Allow IQe to run automatically."""
-        await self._async_update_energy_settings(
-            lambda settings: settings.__setitem__(self._field, True)
-        )
+        """Allow IQe to run automatically, once it has something to run from."""
+        def _enable(settings):
+            if settings.get(self._field) is not True:
+                problem = iqe_missing_requirements(settings)
+                if problem:
+                    raise ServiceValidationError(problem)
+            settings[self._field] = True
+
+        await self._async_update_energy_settings(_enable)
 
     async def async_turn_off(self, **_kwargs) -> None:
         """Stop IQe running automatically."""
@@ -260,7 +266,6 @@ class MyPlaceIQIQeEnabledDaySwitch(MyPlaceIQEnergySettingsEntity, SwitchEntity):
 
     _attr_entity_category = EntityCategory.CONFIG
     _attr_icon = "mdi:calendar-week"
-    _iqe_managed_visibility = True
 
     def __init__(self, coordinator, myplaceiq, config_entry, aircon_id, aircon_name,
                  index, key, label):
