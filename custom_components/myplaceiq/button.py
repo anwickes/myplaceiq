@@ -4,7 +4,7 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DOMAIN
+from .const import DOMAIN, aircon_device_name, zone_device_name
 
 logger = logging.getLogger(__name__)
 
@@ -116,8 +116,13 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                     )
                 )
 
-            # Priority toggle button (for any zone where priority is allowed)
-            if zone_data.get("isPriorityZoneAllowed", False):
+            # Priority toggle button (for any zone where priority is allowed).
+            # Under QTemp the hub reports every zone as not allowed, so we
+            # cannot tell which zones qualify; create the button for all of
+            # them so it exists when the user switches back to priority
+            # mode, and refuse the press while QTemp is active.
+            if (zone_data.get("isPriorityZoneAllowed", False)
+                    or aircon_data.get("airconSettings", {}).get("zoneOperation") == "qTemp"):
                 entities.append(
                     MyPlaceIQButton(
                         coordinator=coordinator,
@@ -157,7 +162,8 @@ class MyPlaceIQButton(ButtonEntity):
         self._aircon_id = aircon_id if is_zone else entity_id
         self._name = entity_data.get("name", f"{'Zone' if is_zone else 'Aircon'}")
         self._attr_unique_id = f"{config_entry.entry_id}_{'zone' if is_zone else 'aircon'}_{entity_id}_{action}" # pylint: disable=line-too-long
-        self._attr_name = f"{self._name}_{action}".replace(" ", "_").lower()
+        self._attr_has_entity_name = True
+        self._attr_name = f"HVAC {self._action.replace('_', ' ').title()}"
         self._attr_icon = self._resolve_icon(action, is_zone)
         self._attr_entity_category = EntityCategory.CONFIG
 
@@ -208,7 +214,7 @@ class MyPlaceIQButton(ButtonEntity):
 
     async def async_press(self):
         """Handle button press for AC or zone commands."""
-        logger.debug("Button pressed: %s", self._attr_name)
+        logger.debug("Button pressed: %s", self._attr_unique_id)
         try:
             data = self.coordinator.data
             if not isinstance(data, dict) or not data or "body" not in data:
@@ -254,6 +260,11 @@ class MyPlaceIQButton(ButtonEntity):
             elif self._command_type == "SetPriorityZone" and self._action == "toggle_priority":
                 # Priority toggle: read current isPriorityZone and flip it
                 zone = body.get("zones", {}).get(self._entity_id, {})
+                if not zone.get("isPriorityZoneAllowed", False):
+                    raise HomeAssistantError(
+                        "Priority zone cannot be set for this zone right now "
+                        "(QTemp selects the priority zone automatically)"
+                    )
                 current_priority = zone.get("isPriorityZone", False)
                 new_priority = not current_priority
                 command = {
@@ -299,7 +310,10 @@ class MyPlaceIQButton(ButtonEntity):
         device_info = {
             "identifiers": 
                 {(DOMAIN, f"{self._config_entry.entry_id}_{'zone' if self._is_zone else 'aircon'}_{self._entity_id}")}, # pylint: disable=line-too-long
-            "name": f"{'Zone' if self._is_zone else 'Aircon'} {self._name}",
+            "name": (
+                zone_device_name(self._name) if self._is_zone
+                else aircon_device_name(self._name)
+            ),
             "manufacturer": "MyPlaceIQ",
             "model": "Zone" if self._is_zone else "Aircon"
         }

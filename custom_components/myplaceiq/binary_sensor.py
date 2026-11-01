@@ -3,7 +3,7 @@ import logging
 import time
 from homeassistant.components.binary_sensor import BinarySensorEntity, BinarySensorDeviceClass
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from .const import DOMAIN
+from .const import DOMAIN, aircon_device_name, zone_device_name
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +87,7 @@ class MyPlaceIQAirconStateBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._name = aircon_data.get("name", "Aircon")
         self._last_known_is_on = None
         self._attr_unique_id = f"{config_entry.entry_id}_aircon_{aircon_id}_state"
+        self._attr_has_entity_name = True
         self._attr_name = "HVAC State"
         self._attr_device_class = BinarySensorDeviceClass.POWER
         self._attr_icon = "mdi:power"
@@ -116,7 +117,7 @@ class MyPlaceIQAirconStateBinarySensor(CoordinatorEntity, BinarySensorEntity):
         """Return device information."""
         return {
             "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}")},
-            "name": f"Aircon {self._name}",
+            "name": aircon_device_name(self._name),
             "manufacturer": "MyPlaceIQ",
             "model": "Aircon",
         }
@@ -135,7 +136,8 @@ class MyPlaceIQZoneStateBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._config_entry = config_entry
         self._name = zone_data.get("name", "Zone")
         self._attr_unique_id = f"{config_entry.entry_id}_zone_{zone_id}_state"
-        self._attr_name = f"{self._name}_state".replace(" ", "_").lower()
+        self._attr_has_entity_name = True
+        self._attr_name = "HVAC State"
         self._attr_device_class = BinarySensorDeviceClass.POWER
         self._attr_icon = "mdi:toggle-switch"
 
@@ -161,7 +163,7 @@ class MyPlaceIQZoneStateBinarySensor(CoordinatorEntity, BinarySensorEntity):
         """Return device information."""
         return {
             "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_zone_{self._zone_id}")},
-            "name": f"Zone {self._name}",
+            "name": zone_device_name(self._name),
             "manufacturer": "MyPlaceIQ",
             "model": "Zone",
             "via_device": (DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}"),
@@ -181,7 +183,8 @@ class MyPlaceIQZonePriorityBinarySensor(CoordinatorEntity, BinarySensorEntity):
         self._config_entry = config_entry
         self._name = zone_data.get("name", "Zone")
         self._attr_unique_id = f"{config_entry.entry_id}_zone_{zone_id}_priority"
-        self._attr_name = f"{self._name}_priority".replace(" ", "_").lower()
+        self._attr_has_entity_name = True
+        self._attr_name = "HVAC Priority"
 
     @property
     def is_on(self):
@@ -209,7 +212,7 @@ class MyPlaceIQZonePriorityBinarySensor(CoordinatorEntity, BinarySensorEntity):
         """Return device information — attach to the zone device."""
         return {
             "identifiers": {(DOMAIN, f"{self._config_entry.entry_id}_zone_{self._zone_id}")},
-            "name": f"Zone {self._name}",
+            "name": zone_device_name(self._name),
             "manufacturer": "MyPlaceIQ",
             "model": "Zone",
             "via_device": (DOMAIN, f"{self._config_entry.entry_id}_aircon_{self._aircon_id}"),
